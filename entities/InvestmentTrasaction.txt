@@ -1,0 +1,47 @@
+{
+  "name": "InvestmentTransaction",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "buy",
+        "sell",
+        "transfer_in",
+        "transfer_out"
+      ],
+      "description": "Tipo de transacci\u00f3n"
+    },
+    "position_id": {
+      "type": "string",
+      "description": "ID de la posici\u00f3n"
+    },
+    "position_name": {
+      "type": "string",
+      "description": "Nombre de la posici\u00f3n"
+    },
+    "amount_eur": {
+      "type": "number",
+      "description": "Cantidad en euros"
+    },
+    "price": {
+      "type": "number",
+      "description": "Precio en el momento"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "amount_eur",
+    "date"
+  ]
+}

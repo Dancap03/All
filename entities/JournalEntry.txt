@@ -1,0 +1,58 @@
+{
+  "name": "JournalEntry",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Entry title"
+    },
+    "content": {
+      "type": "string",
+      "description": "Your thoughts"
+    },
+    "mood": {
+      "type": "string",
+      "enum": [
+        "great",
+        "good",
+        "neutral",
+        "stressed",
+        "frustrated"
+      ],
+      "description": "How you're feeling"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Entry date"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization"
+    }
+  },
+  "required": [
+    "content",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

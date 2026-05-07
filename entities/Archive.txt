@@ -1,0 +1,51 @@
+{
+  "name": "Archive",
+  "type": "object",
+  "properties": {
+    "month": {
+      "type": "number",
+      "description": "Month number (1-12)"
+    },
+    "year": {
+      "type": "number",
+      "description": "Year"
+    },
+    "total_trades": {
+      "type": "number",
+      "description": "Total trades in this month"
+    },
+    "total_pl": {
+      "type": "number",
+      "description": "Total profit/loss for the month"
+    },
+    "win_rate": {
+      "type": "number",
+      "description": "Win rate percentage"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Monthly reflection notes"
+    }
+  },
+  "required": [
+    "month",
+    "year"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

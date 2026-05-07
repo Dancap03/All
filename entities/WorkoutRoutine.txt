@@ -1,0 +1,53 @@
+{
+  "name": "WorkoutRoutine",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nombre de la rutina"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "strength",
+        "cardio",
+        "sport"
+      ],
+      "description": "Categor\u00eda: fuerza, cardio o deporte"
+    },
+    "sport_type": {
+      "type": "string",
+      "description": "Tipo de deporte si es categor\u00eda sport"
+    },
+    "cardio_type": {
+      "type": "string",
+      "description": "Tipo de cardio si es categor\u00eda cardio"
+    },
+    "cardio_unit": {
+      "type": "string",
+      "description": "Unidad de medida para cardio (km, pasos, etc)"
+    },
+    "exercises": {
+      "type": "array",
+      "description": "Lista de ejercicios para rutina de fuerza",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "muscle_group": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name",
+    "category"
+  ]
+}

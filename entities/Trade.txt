@@ -1,0 +1,107 @@
+{
+  "name": "Trade",
+  "type": "object",
+  "properties": {
+    "symbol": {
+      "type": "string",
+      "description": "Trading symbol (e.g., EURUSD, AAPL, BTC)"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "long",
+        "short"
+      ],
+      "description": "Trade direction"
+    },
+    "trade_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the trade"
+    },
+    "profit_loss": {
+      "type": "number",
+      "description": "Profit or loss amount"
+    },
+    "profit_loss_percent": {
+      "type": "number",
+      "description": "Profit or loss percentage"
+    },
+    "emotions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "fear",
+          "greed",
+          "anger",
+          "neutral",
+          "revenge",
+          "fomo",
+          "overtrading",
+          "impatient"
+        ]
+      },
+      "description": "Emotions during the trade"
+    },
+    "setup_type": {
+      "type": "string",
+      "description": "Type of trading setup"
+    },
+    "screenshots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "URLs of uploaded screenshots"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free text notes about the trade"
+    },
+    "lessons_learned": {
+      "type": "string",
+      "description": "Key takeaways and lessons"
+    },
+    "suggestions_to_improve": {
+      "type": "string",
+      "description": "What can be improved for next time"
+    },
+    "followed_plan": {
+      "type": "boolean",
+      "description": "Did you follow your trading plan?"
+    },
+    "rating": {
+      "type": "number",
+      "description": "Self-rating of the trade execution (1-5)"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Custom tags for categorization"
+    }
+  },
+  "required": [
+    "symbol",
+    "direction"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

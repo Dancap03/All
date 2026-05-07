@@ -1,0 +1,88 @@
+{
+  "name": "InvestmentPosition",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "description": "S\u00edmbolo del ticker (BTC, AAPL, etc)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Nombre completo"
+    },
+    "investment_type": {
+      "type": "string",
+      "enum": [
+        "stock",
+        "etf",
+        "index_fund",
+        "crypto",
+        "bond",
+        "commodity",
+        "other"
+      ],
+      "description": "Tipo de inversi\u00f3n"
+    },
+    "invested_amount_eur": {
+      "type": "number",
+      "description": "Dinero invertido en euros"
+    },
+    "buy_price": {
+      "type": "number",
+      "description": "Precio de compra en moneda original"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Moneda de la inversi\u00f3n"
+    },
+    "current_price": {
+      "type": "number",
+      "description": "Precio actual en moneda original"
+    },
+    "current_value_eur": {
+      "type": "number",
+      "description": "Valor actual en euros"
+    },
+    "last_updated": {
+      "type": "string",
+      "description": "\u00daltima actualizaci\u00f3n de precio"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n adicional"
+    },
+    "purchase_history": {
+      "type": "array",
+      "description": "Historial de compras",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "amount_eur": {
+            "type": "number"
+          },
+          "buy_price": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de primera compra"
+    }
+  },
+  "required": [
+    "ticker",
+    "name",
+    "investment_type",
+    "invested_amount_eur",
+    "date"
+  ]
+}

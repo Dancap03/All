@@ -1,0 +1,31 @@
+{
+  "name": "Note",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "string",
+      "description": "Contenido de la nota"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "\u00daltima actualizaci\u00f3n"
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

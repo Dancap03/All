@@ -1,0 +1,73 @@
+{
+  "name": "DailyPlan",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Trading day date"
+    },
+    "market_bias": {
+      "type": "string",
+      "enum": [
+        "bullish",
+        "bearish",
+        "neutral",
+        "uncertain"
+      ],
+      "description": "Overall market bias for the day"
+    },
+    "key_levels": {
+      "type": "string",
+      "description": "Key support/resistance levels to watch"
+    },
+    "planned_setups": {
+      "type": "string",
+      "description": "Trading setups you plan to take"
+    },
+    "max_trades": {
+      "type": "number",
+      "description": "Maximum number of trades allowed"
+    },
+    "risk_per_trade": {
+      "type": "number",
+      "description": "Risk percentage per trade"
+    },
+    "news_events": {
+      "type": "string",
+      "description": "Important news/economic events"
+    },
+    "mental_goals": {
+      "type": "string",
+      "description": "Mental state goals and discipline reminders"
+    },
+    "suggestions_to_improve": {
+      "type": "string",
+      "description": "What can I improve today or lessons from previous days"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

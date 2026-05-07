@@ -1,0 +1,68 @@
+{
+  "name": "GymRecord",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "strength",
+        "cardio"
+      ],
+      "description": "Categor\u00eda del record"
+    },
+    "exercise_name": {
+      "type": "string",
+      "description": "Nombre del ejercicio"
+    },
+    "muscle_group": {
+      "type": "string",
+      "description": "Grupo muscular"
+    },
+    "weight_kg": {
+      "type": "number",
+      "description": "Peso m\u00e1ximo (fuerza)"
+    },
+    "reps": {
+      "type": "number",
+      "description": "Repeticiones con ese peso (fuerza)"
+    },
+    "cardio_type": {
+      "type": "string",
+      "description": "Tipo de cardio"
+    },
+    "cardio_unit": {
+      "type": "string",
+      "description": "Unidad"
+    },
+    "distance_km": {
+      "type": "number",
+      "description": "Distancia en km (cardio correr)"
+    },
+    "duration_minutes": {
+      "type": "number",
+      "description": "Duraci\u00f3n en minutos (cardio)"
+    },
+    "avg_speed_kmh": {
+      "type": "number",
+      "description": "Velocidad media km/h"
+    },
+    "record_type": {
+      "type": "string",
+      "description": "Para cardio: best_distance o best_pace"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "ID de la sesi\u00f3n donde se logr\u00f3"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del record"
+    }
+  },
+  "required": [
+    "category",
+    "exercise_name",
+    "date"
+  ]
+}

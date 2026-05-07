@@ -1,0 +1,99 @@
+{
+  "name": "CalendarEvent",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "T\u00edtulo del evento o tarea"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "event",
+        "task"
+      ],
+      "default": "event",
+      "description": "Evento (tiene hora fija) o tarea (completable durante el d\u00eda)"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha"
+    },
+    "start_time": {
+      "type": "string",
+      "description": "Hora inicio HH:mm"
+    },
+    "end_time": {
+      "type": "string",
+      "description": "Hora fin HH:mm"
+    },
+    "color": {
+      "type": "string",
+      "default": "#60a5fa",
+      "description": "Color del evento"
+    },
+    "repeat": {
+      "type": "string",
+      "enum": [
+        "none",
+        "daily",
+        "weekly",
+        "custom_weekly",
+        "monthly",
+        "yearly"
+      ],
+      "default": "none",
+      "description": "Repetici\u00f3n"
+    },
+    "repeat_days": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "D\u00edas de la semana para repetici\u00f3n personalizada (0=Dom, 1=Lun, ..., 6=S\u00e1b)"
+    },
+    "repeat_end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha fin de repetici\u00f3n (null = para siempre)"
+    },
+    "repeat_years": {
+      "type": "number",
+      "description": "Para repetici\u00f3n anual: n\u00famero de a\u00f1os (null = para siempre)"
+    },
+    "completed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Completado (solo para tareas)"
+    },
+    "all_day": {
+      "type": "boolean",
+      "default": false,
+      "description": "Todo el d\u00eda"
+    }
+  },
+  "required": [
+    "title",
+    "date",
+    "event_type"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

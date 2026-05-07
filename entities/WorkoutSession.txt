@@ -1,0 +1,110 @@
+{
+  "name": "WorkoutSession",
+  "type": "object",
+  "properties": {
+    "routine_id": {
+      "type": "string",
+      "description": "ID de la rutina usada"
+    },
+    "routine_name": {
+      "type": "string",
+      "description": "Nombre de la rutina"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "strength",
+        "cardio",
+        "sport"
+      ],
+      "description": "Categor\u00eda del entrenamiento"
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Hora de inicio"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Hora de finalizaci\u00f3n"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del entrenamiento"
+    },
+    "duration_minutes": {
+      "type": "number",
+      "description": "Duraci\u00f3n en minutos"
+    },
+    "exercises_log": {
+      "type": "array",
+      "description": "Log de ejercicios realizados",
+      "items": {
+        "type": "object",
+        "properties": {
+          "exercise_id": {
+            "type": "string"
+          },
+          "exercise_name": {
+            "type": "string"
+          },
+          "muscle_group": {
+            "type": "string"
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "set_number": {
+                  "type": "number"
+                },
+                "entries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "reps": {
+                        "type": "number"
+                      },
+                      "weight_kg": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "cardio_value": {
+      "type": "number",
+      "description": "Valor medido en cardio (km, escalones, etc)"
+    },
+    "cardio_unit": {
+      "type": "string",
+      "description": "Unidad del cardio"
+    },
+    "cardio_type": {
+      "type": "string",
+      "description": "Tipo de cardio"
+    },
+    "sport_type": {
+      "type": "string",
+      "description": "Tipo de deporte"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notas adicionales"
+    }
+  },
+  "required": [
+    "category",
+    "start_time",
+    "date"
+  ]
+}

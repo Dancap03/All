@@ -1,0 +1,50 @@
+{
+  "name": "ProjectTask",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "ID del proyecto"
+    },
+    "project_name": {
+      "type": "string",
+      "description": "Nombre del proyecto"
+    },
+    "name": {
+      "type": "string",
+      "description": "Nombre de la tarea"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n de la tarea"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha l\u00edmite"
+    },
+    "completed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Completada"
+    }
+  },
+  "required": [
+    "project_id",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

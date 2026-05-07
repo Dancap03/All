@@ -1,0 +1,96 @@
+{
+  "name": "WeeklyRecap",
+  "type": "object",
+  "properties": {
+    "week_start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Start date of the week (Monday)"
+    },
+    "week_end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "End date of the week (Sunday)"
+    },
+    "total_trades": {
+      "type": "number",
+      "description": "Total trades taken this week"
+    },
+    "total_pl": {
+      "type": "number",
+      "description": "Total profit/loss for the week"
+    },
+    "win_rate": {
+      "type": "number",
+      "description": "Win rate percentage"
+    },
+    "wins": {
+      "type": "number",
+      "description": "Number of winning trades"
+    },
+    "losses": {
+      "type": "number",
+      "description": "Number of losing trades"
+    },
+    "best_trade": {
+      "type": "string",
+      "description": "Description of your best trade"
+    },
+    "worst_trade": {
+      "type": "string",
+      "description": "Description of your worst trade"
+    },
+    "what_went_well": {
+      "type": "string",
+      "description": "What went well this week"
+    },
+    "what_needs_improvement": {
+      "type": "string",
+      "description": "What needs improvement"
+    },
+    "key_lessons": {
+      "type": "string",
+      "description": "Key lessons learned this week"
+    },
+    "goals_for_next_week": {
+      "type": "string",
+      "description": "Goals and focus areas for next week"
+    },
+    "emotional_state": {
+      "type": "string",
+      "enum": [
+        "excellent",
+        "good",
+        "neutral",
+        "struggling",
+        "burnout"
+      ],
+      "description": "Overall emotional state this week"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "week_start_date",
+    "week_end_date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

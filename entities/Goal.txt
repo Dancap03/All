@@ -1,0 +1,51 @@
+{
+  "name": "Goal",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "T\u00edtulo de la meta"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n"
+    },
+    "term": {
+      "type": "string",
+      "enum": [
+        "short",
+        "medium",
+        "long"
+      ],
+      "description": "Plazo: corto, medio, largo"
+    },
+    "completed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Completada"
+    },
+    "completed_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de completado"
+    }
+  },
+  "required": [
+    "title",
+    "term"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

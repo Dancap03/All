@@ -1,0 +1,44 @@
+{
+  "name": "ImportantDay",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "The important date"
+    },
+    "note": {
+      "type": "string",
+      "description": "Note about why this day is important"
+    },
+    "color": {
+      "type": "string",
+      "enum": [
+        "green",
+        "red"
+      ],
+      "default": "green",
+      "description": "Color marker for the day"
+    }
+  },
+  "required": [
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

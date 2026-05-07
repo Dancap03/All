@@ -1,0 +1,23 @@
+{
+  "name": "MonthlyBudget",
+  "type": "object",
+  "properties": {
+    "month": {
+      "type": "number",
+      "description": "Mes (1-12)"
+    },
+    "year": {
+      "type": "number",
+      "description": "A\u00f1o"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Presupuesto planificado en euros"
+    }
+  },
+  "required": [
+    "month",
+    "year",
+    "amount"
+  ]
+}

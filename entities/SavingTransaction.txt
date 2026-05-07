@@ -1,0 +1,48 @@
+{
+  "name": "SavingTransaction",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "income",
+        "to_pot",
+        "from_pot",
+        "to_daily"
+      ],
+      "description": "Tipo: ingreso, mover a hucha, mover de hucha, pasar a d\u00eda a d\u00eda"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Cantidad"
+    },
+    "pot_id": {
+      "type": "string",
+      "description": "ID de la hucha (si aplica)"
+    },
+    "pot_name": {
+      "type": "string",
+      "description": "Nombre de la hucha"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha"
+    },
+    "month": {
+      "type": "number"
+    },
+    "year": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "type",
+    "amount",
+    "date"
+  ]
+}

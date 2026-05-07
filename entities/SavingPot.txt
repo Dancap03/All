@@ -1,0 +1,29 @@
+{
+  "name": "SavingPot",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nombre de la hucha"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n"
+    },
+    "color": {
+      "type": "string",
+      "description": "Color identificativo"
+    },
+    "target_amount": {
+      "type": "number",
+      "description": "Objetivo de ahorro (opcional)"
+    },
+    "current_amount": {
+      "type": "number",
+      "description": "Cantidad actual en la hucha"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "name": "FinanceTransaction",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "income",
+        "expense",
+        "transfer_to_savings",
+        "transfer_to_investment",
+        "transfer_from_savings",
+        "transfer_from_investment"
+      ],
+      "description": "Tipo de transacci\u00f3n"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Cantidad en euros"
+    },
+    "category": {
+      "type": "string",
+      "description": "Categor\u00eda del movimiento"
+    },
+    "subcategory": {
+      "type": "string",
+      "description": "Subcategor\u00eda"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de la transacci\u00f3n"
+    },
+    "month": {
+      "type": "number",
+      "description": "Mes (1-12)"
+    },
+    "year": {
+      "type": "number",
+      "description": "A\u00f1o"
+    },
+    "budget_id": {
+      "type": "string",
+      "description": "ID del presupuesto asociado"
+    }
+  },
+  "required": [
+    "type",
+    "amount",
+    "date"
+  ]
+}

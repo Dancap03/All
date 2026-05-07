@@ -1,0 +1,67 @@
+{
+  "name": "ImprovementGoal",
+  "type": "object",
+  "properties": {
+    "goal": {
+      "type": "string",
+      "description": "What you want to improve"
+    },
+    "description": {
+      "type": "string",
+      "description": "Details about this improvement area"
+    },
+    "action_steps": {
+      "type": "string",
+      "description": "Specific actions to take"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "in_progress",
+        "completed",
+        "not_started"
+      ],
+      "default": "not_started",
+      "description": "Current status"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "default": "medium",
+      "description": "Priority level"
+    },
+    "target_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Target completion date"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Progress notes"
+    }
+  },
+  "required": [
+    "goal"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

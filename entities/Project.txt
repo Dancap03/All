@@ -1,0 +1,50 @@
+{
+  "name": "Project",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nombre del proyecto"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descripci\u00f3n del proyecto"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de fin del proyecto"
+    },
+    "color": {
+      "type": "string",
+      "default": "#a78bfa",
+      "description": "Color del proyecto"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "completed",
+        "paused"
+      ],
+      "default": "active"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

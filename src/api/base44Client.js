@@ -1,1 +1,1 @@
-xport const base44 = {};
+export const base44 = {};

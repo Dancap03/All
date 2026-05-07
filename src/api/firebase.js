@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "tu-proyecto.firebaseapp.com",
-  projectId: "tu-proyecto",
-  storageBucket: "tu-proyecto.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: "AIzaSyCtfDrJwWbmE7m9OwwHxSJwAiIvkr1GKTU",
+  authDomain: "dancaballinone.firebaseapp.com",
+  projectId: "dancaballinone",
+  storageBucket: "dancaballinone.firebasestorage.app",
+  messagingSenderId: "375365819039",
+  appId: "1:375365819039:web:b72ff45bfadc8ff9a520aa"
 };
 
 const app = initializeApp(firebaseConfig);

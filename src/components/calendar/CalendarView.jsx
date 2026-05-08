@@ -199,13 +199,13 @@ export default function CalendarView({ events, onDayClick, viewMode, setViewMode
           <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="font-grotesk font-semibold text-foreground text-sm capitalize min-w-[150px] text-center">{title()}</span>
+          <span className="font-grotesk font-semibold text-foreground text-sm capitalize min-w-0 text-center">{title()}</span>
           <button onClick={() => navigate(1)} className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground">
             <ChevronRight className="w-4 h-4" />
           </button>
           <button onClick={() => setCurrentDate(new Date())} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg border border-border ml-1">Hoy</button>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto">
           {[['week','Semana'],['month','Mes'],['year','Año']].map(([mode, label]) => (
             <button key={mode} onClick={() => setViewMode(mode)}
               className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${viewMode === mode ? 'bg-finance/20 text-finance border border-finance/30' : 'text-muted-foreground hover:text-foreground'}`}>

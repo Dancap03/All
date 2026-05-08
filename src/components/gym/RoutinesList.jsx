@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, Dumbbell, Activity, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { getCategoryLabel, getCategoryColor, getCategoryDotColor, MUSCLE_GROUPS } from '@/lib/gymData';
+import { getCategoryLabel, getCategoryColor, getCategoryDotColor, MUSCLE_GROUPS, EXERCISE_IMAGES, CARDIO_EXERCISES, CARDIO_IMAGES, SPORT_IMAGES } from '@/lib/gymData';
 
 const CATEGORY_ICONS = { strength: Dumbbell, cardio: Activity, sport: Trophy };
 
@@ -17,6 +17,17 @@ export default function RoutinesList({ routines, onAdd, onEdit, onDelete }) {
     setDeleteId(null);
   };
 
+  const getRoutineEmoji = (routine) => {
+    if (routine.category === 'cardio') {
+      const ex = CARDIO_EXERCISES.find(c => c.label === routine.cardio_type);
+      return ex ? (CARDIO_IMAGES[ex.id] || '🏃') : '🏃';
+    }
+    if (routine.category === 'sport') {
+      return SPORT_IMAGES[routine.sport_type] || '🏅';
+    }
+    return null; // strength shows icon
+  };
+
   return (
     <Card className="glass-card">
       <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -26,7 +37,8 @@ export default function RoutinesList({ routines, onAdd, onEdit, onDelete }) {
         </CardTitle>
         <Button size="sm" onClick={onAdd} className="bg-gym text-primary-foreground hover:bg-gym/90 gap-1.5">
           <Plus className="w-4 h-4" />
-          Nueva rutina
+          <span className="hidden sm:inline">Nueva rutina</span>
+          <span className="sm:hidden">Nueva</span>
         </Button>
       </CardHeader>
       <CardContent>
@@ -41,15 +53,27 @@ export default function RoutinesList({ routines, onAdd, onEdit, onDelete }) {
             {routines.map(routine => {
               const Icon = CATEGORY_ICONS[routine.category] || Dumbbell;
               const isExpanded = expanded === routine.id;
+              const emoji = getRoutineEmoji(routine);
+
               return (
                 <div key={routine.id} className="bg-muted/20 rounded-xl border border-border overflow-hidden transition-all">
-                  <div className="flex items-center gap-3 p-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${getCategoryDotColor(routine.category)}20` }}>
-                      <Icon className="w-4 h-4" style={{ color: getCategoryDotColor(routine.category) }} />
+                  <div className="flex items-center gap-2 sm:gap-3 p-3">
+                    {/* Icon or emoji */}
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: `${getCategoryDotColor(routine.category)}20` }}
+                    >
+                      {emoji ? (
+                        <span className="text-lg leading-none">{emoji}</span>
+                      ) : (
+                        <Icon className="w-4 h-4" style={{ color: getCategoryDotColor(routine.category) }} />
+                      )}
                     </div>
+
+                    {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-foreground text-sm">{routine.name}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="font-medium text-foreground text-sm truncate">{routine.name}</div>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                         <Badge className={`text-xs ${getCategoryColor(routine.category)}`}>
                           {getCategoryLabel(routine.category)}
                         </Badge>
@@ -61,7 +85,9 @@ export default function RoutinesList({ routines, onAdd, onEdit, onDelete }) {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
                       {routine.category === 'strength' && routine.exercises?.length > 0 && (
                         <button
                           onClick={() => setExpanded(isExpanded ? null : routine.id)}
@@ -79,16 +105,21 @@ export default function RoutinesList({ routines, onAdd, onEdit, onDelete }) {
                     </div>
                   </div>
 
+                  {/* Expanded exercises */}
                   {isExpanded && routine.exercises?.length > 0 && (
                     <div className="border-t border-border px-3 pb-3 pt-2">
                       <div className="flex flex-wrap gap-1.5">
-                        {routine.exercises.map((ex, i) => (
-                          <div key={i} className="flex items-center gap-1 px-2 py-1 bg-card rounded-lg text-xs">
-                            <span className="text-foreground">{ex.name}</span>
-                            <span className="text-muted-foreground">·</span>
-                            <span className="text-muted-foreground">{MUSCLE_GROUPS.find(m => m.id === ex.muscle_group)?.label}</span>
-                          </div>
-                        ))}
+                        {routine.exercises.map((ex, i) => {
+                          const exEmoji = EXERCISE_IMAGES[ex.name] || '🏋️';
+                          return (
+                            <div key={i} className="flex items-center gap-1 px-2 py-1 bg-card rounded-lg text-xs">
+                              <span>{exEmoji}</span>
+                              <span className="text-foreground">{ex.name}</span>
+                              <span className="text-muted-foreground">·</span>
+                              <span className="text-muted-foreground">{MUSCLE_GROUPS.find(m => m.id === ex.muscle_group)?.label}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

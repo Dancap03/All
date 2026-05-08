@@ -5,7 +5,7 @@ import { Trophy, Dumbbell, Activity, Trash2, Zap } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/base44Client'; 
 import { EXERCISE_IMAGES, CARDIO_IMAGES, CARDIO_EXERCISES } from '@/lib/gymData';
 
 export default function RecordsPanel({ records, onRecordDeleted }) {

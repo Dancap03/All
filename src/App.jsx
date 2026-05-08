@@ -13,7 +13,7 @@ import Gym from './pages/Gym';
 import Finanzas from './pages/Finanzas';
 import Calendario from './pages/Calendario';
 
-// FORMULARIO DE LOGIN PRIVADO
+// FORMULARIO DE LOGIN DE FIREBASE
 const SimpleLogin = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState('');

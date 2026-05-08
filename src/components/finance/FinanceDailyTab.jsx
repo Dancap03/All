@@ -200,7 +200,7 @@ export default function FinanceDailyTab() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="glass-card border-finance/20">
           <CardContent className="pt-4 pb-3">
             <div className="text-xs text-muted-foreground mb-1">Balance</div>

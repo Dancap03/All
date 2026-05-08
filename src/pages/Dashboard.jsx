@@ -227,13 +227,13 @@ export default function Dashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1 overflow-x-auto min-w-0">
             {weekDays.map((day, i) => {
               const dayEvents = getEventsForDate(events, day);
               const daySessions = sessions.filter(s => s.date === format(day, 'yyyy-MM-dd'));
               const isToday = isSameDay(day, today);
               return (
-                <div key={i} className={`p-2 rounded-xl border ${isToday ? 'border-primary/40 bg-primary/5' : 'border-border'}`}>
+                <div key={i} className={`p-1 sm:p-2 rounded-xl border ${isToday ? 'border-primary/40 bg-primary/5' : 'border-border'}`}>
                   <div className={`text-xs font-medium mb-1 ${isToday ? 'text-primary' : 'text-muted-foreground'}`}>
                     {format(day, 'EEE', { locale: es })}
                   </div>

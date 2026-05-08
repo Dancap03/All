@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { format, isSameDay } from 'date-fns';
+import { format } from 'date-fns';
 import GymCalendar from '@/components/gym/GymCalendar';
 import RoutinesList from '@/components/gym/RoutinesList';
 import RoutineForm from '@/components/gym/RoutineForm';
@@ -66,7 +66,10 @@ export default function Gym() {
   const handleSaveSession = async (sessionData) => {
     const saved = await base44.entities.WorkoutSession.create(sessionData);
 
-    // Process records for strength
+    // Fetch fresh records to avoid stale state comparisons
+    const freshRecords = await base44.entities.GymRecord.list('-date', 200);
+
+    // ── STRENGTH RECORDS ──
     if (sessionData.category === 'strength' && sessionData.exercises_log) {
       for (const ex of sessionData.exercises_log) {
         let bestWeight = 0;
@@ -81,9 +84,10 @@ export default function Gym() {
           }
         }
         if (bestWeight > 0) {
-          // Check if record exists and is worse
-          const existing = records.find(r => r.category === 'strength' && r.exercise_name === ex.exercise_name);
-          if (!existing || bestWeight > existing.weight_kg) {
+          const existing = freshRecords.find(r =>
+            r.category === 'strength' && r.exercise_name === ex.exercise_name
+          );
+          if (!existing || bestWeight > (existing.weight_kg || 0)) {
             if (existing) await base44.entities.GymRecord.delete(existing.id);
             await base44.entities.GymRecord.create({
               category: 'strength',
@@ -99,42 +103,58 @@ export default function Gym() {
       }
     }
 
-    // Process records for cardio (running types)
+    // ── CARDIO RECORDS ──
     if (sessionData.category === 'cardio') {
       const cardioEx = CARDIO_EXERCISES.find(c => c.label === sessionData.cardio_type);
-      if (cardioEx && (cardioEx.unit === 'km') && sessionData.cardio_value > 0) {
-        const distKm = parseFloat(sessionData.cardio_value) || 0;
-        const durMin = parseFloat(sessionData.duration_minutes) || 0;
-        const avgSpeed = durMin > 0 ? (distKm / durMin) * 60 : 0;
+      const distKm = parseFloat(sessionData.cardio_value) || 0;
+      const durMin = parseFloat(sessionData.duration_minutes) || 0;
 
-        // Fetch fresh records to avoid stale state
-        const freshRecords = await base44.entities.GymRecord.list('-date', 200);
-        const existingDist = freshRecords.find(r => r.category === 'cardio' && r.cardio_type === sessionData.cardio_type && r.record_type === 'best_distance');
-        const existingPace = freshRecords.find(r => r.category === 'cardio' && r.cardio_type === sessionData.cardio_type && r.record_type === 'best_pace');
-
-        const isBestDist = !existingDist || distKm > (existingDist.distance_km || 0);
-        const isBestPace = avgSpeed > 0 && (!existingPace || avgSpeed > (existingPace.avg_speed_kmh || 0));
-
-        const recordPayload = {
-          category: 'cardio',
-          exercise_name: sessionData.cardio_type,
-          cardio_type: sessionData.cardio_type,
-          cardio_unit: 'km',
-          distance_km: distKm,
-          duration_minutes: durMin,
-          avg_speed_kmh: avgSpeed,
-          session_id: saved.id,
-          date: sessionData.date,
-        };
-
-        if (isBestDist) {
+      // Distance record: for any cardio with km unit
+      if (cardioEx && cardioEx.unit === 'km' && distKm > 0) {
+        const existingDist = freshRecords.find(r =>
+          r.category === 'cardio' &&
+          r.cardio_type === sessionData.cardio_type &&
+          r.record_type === 'best_distance'
+        );
+        if (!existingDist || distKm > (existingDist.distance_km || 0)) {
           if (existingDist) await base44.entities.GymRecord.delete(existingDist.id);
-          await base44.entities.GymRecord.create({ ...recordPayload, record_type: 'best_distance' });
+          await base44.entities.GymRecord.create({
+            category: 'cardio',
+            record_type: 'best_distance',
+            exercise_name: sessionData.cardio_type,
+            cardio_type: sessionData.cardio_type,
+            cardio_unit: 'km',
+            distance_km: distKm,
+            duration_minutes: durMin,
+            session_id: saved.id,
+            date: sessionData.date,
+          });
         }
+      }
 
-        if (isBestPace) {
+      // Pace/speed record: km/h only when we have both distance and time
+      // avg_speed_kmh = distKm / durMin * 60
+      if (cardioEx && cardioEx.unit === 'km' && distKm > 0 && durMin > 0) {
+        const avgSpeed = (distKm / durMin) * 60;
+        const existingPace = freshRecords.find(r =>
+          r.category === 'cardio' &&
+          r.cardio_type === sessionData.cardio_type &&
+          r.record_type === 'best_pace'
+        );
+        if (!existingPace || avgSpeed > (existingPace.avg_speed_kmh || 0)) {
           if (existingPace) await base44.entities.GymRecord.delete(existingPace.id);
-          await base44.entities.GymRecord.create({ ...recordPayload, record_type: 'best_pace' });
+          await base44.entities.GymRecord.create({
+            category: 'cardio',
+            record_type: 'best_pace',
+            exercise_name: sessionData.cardio_type,
+            cardio_type: sessionData.cardio_type,
+            cardio_unit: 'km',
+            distance_km: distKm,
+            duration_minutes: durMin,
+            avg_speed_kmh: avgSpeed,
+            session_id: saved.id,
+            date: sessionData.date,
+          });
         }
       }
     }
@@ -151,16 +171,17 @@ export default function Gym() {
   }
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-grotesk font-bold text-foreground">Gym</h1>
-          <p className="text-muted-foreground mt-1">Seguimiento de entrenamientos</p>
+          <h1 className="text-2xl sm:text-3xl font-grotesk font-bold text-foreground">Gym</h1>
+          <p className="text-muted-foreground mt-0.5 text-sm">Seguimiento de entrenamientos</p>
         </div>
         <WorkoutTracker routines={routines} onSaveSession={handleSaveSession} />
       </div>
 
-      {/* Calendar + Week summary */}
+      {/* Calendar */}
       <GymCalendar sessions={sessions} onDayClick={handleDayClick} />
 
       {/* Routines */}

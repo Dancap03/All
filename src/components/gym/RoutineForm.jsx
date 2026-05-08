@@ -7,7 +7,7 @@ import { Trash2, Dumbbell, Activity, Trophy, Search, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getCategoryLabel, getCategoryColor, MUSCLE_GROUPS, STRENGTH_EXERCISES, CARDIO_EXERCISES, SPORTS, EXERCISE_IMAGES, CARDIO_IMAGES, SPORT_IMAGES } from '@/lib/gymData';
 
-const CATEGORIES = [
+const CATEGORIES = [ 
   { id: 'strength', label: 'Fuerza / Pesas', icon: Dumbbell },
   { id: 'cardio', label: 'Cardio', icon: Activity },
   { id: 'sport', label: 'Deporte', icon: Trophy },

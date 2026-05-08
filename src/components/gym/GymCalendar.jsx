@@ -6,7 +6,7 @@ import { es } from 'date-fns/locale';
 import { getCategoryDotColor } from '@/lib/gymData';
 
 export default function GymCalendar({ sessions, onDayClick }) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(new Date()); 
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);

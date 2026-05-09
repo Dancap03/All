@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, PiggyBank,
 import { format, subMonths, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label }) => { 
   if (active && payload && payload.length) {
     return (
       <div className="bg-card border border-border rounded-lg p-3 text-sm shadow-xl">

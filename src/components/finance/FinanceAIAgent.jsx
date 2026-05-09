@@ -23,59 +23,51 @@ import { format, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 
-// ─── Gemini API helper ────────────────────────────────────────────────────────
-const GEMINI_API = (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+// ─── Groq API helper ─────────────────────────────────────────────────────────
+const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
-async function callGemini(prompt, systemPrompt = '') {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  const contents = [];
-  if (systemPrompt) {
-    contents.push({ role: 'user', parts: [{ text: systemPrompt + '\n\n' + prompt }] });
-  } else {
-    contents.push({ role: 'user', parts: [{ text: prompt }] });
-  }
-  const res = await fetch(GEMINI_API(apiKey), {
+async function callGroq(prompt, systemPrompt = '') {
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+  if (!apiKey) throw new Error('VITE_GROQ_API_KEY no configurada en GitHub Secrets');
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  const res = await fetch(GROQ_API, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents,
-      generationConfig: { maxOutputTokens: 2000, temperature: 0.7 },
-    }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ model: GROQ_MODEL, messages, max_tokens: 2000, temperature: 0.7 }),
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return data.choices?.[0]?.message?.content || '';
 }
 
-async function callGeminiChat(history, userMessage, systemPrompt = '') {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) throw new Error('VITE_GEMINI_API_KEY no configurada');
-  const contents = [];
-  // Inject system prompt as first user message if provided
-  if (systemPrompt && history.length === 0) {
-    contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
-    contents.push({ role: 'model', parts: [{ text: 'Entendido. Estoy listo para ayudarte como Danc Finance AI.' }] });
-  }
-  // Add history
+async function callGroqChat(history, userMessage, systemPrompt = '') {
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+  if (!apiKey) throw new Error('VITE_GROQ_API_KEY no configurada en GitHub Secrets');
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
   for (const m of history) {
-    contents.push({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content || '' }],
-    });
+    messages.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' });
   }
-  contents.push({ role: 'user', parts: [{ text: userMessage }] });
+  messages.push({ role: 'user', content: userMessage });
 
-  const res = await fetch(GEMINI_API(apiKey), {
+  const res = await fetch(GROQ_API, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents,
-      generationConfig: { maxOutputTokens: 2000, temperature: 0.7 },
-    }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ model: GROQ_MODEL, messages, max_tokens: 2000, temperature: 0.7 }),
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return data.choices?.[0]?.message?.content || '';
 }
 
 
@@ -268,7 +260,7 @@ function NewsPanel({ positions }) {
       const prompt = `Dame las 6 noticias más recientes sobre "${item}" (empresa, ETF, sector o índice).
 Responde SOLO con JSON válido, sin texto adicional ni bloques de código:
 [{"title":"título","summary":"resumen 1-2 frases","date":"fecha o hace X días","sentiment":"positive|negative|neutral","source":"nombre medio","url":"url o null"}]`;
-      const text = await callGemini(prompt);
+      const text = await callGroq(prompt);
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
       setNews(n => ({ ...n, [item]: Array.isArray(parsed) ? parsed : [] }));
     } catch {
@@ -1129,7 +1121,7 @@ ${context}
 ## SOBRE EL USUARIO
 ${goals.length > 0 ? `Objetivos definidos:\n${goals.map(g => `- ${g.title}${g.target ? ` (meta: ${fmtMoney(parseFloat(g.target))})` : ''}${g.deadline ? ` para ${g.deadline}` : ''}`).join('\n')}` : 'Sin objetivos definidos aún.'}`;
 
-    const reply = await callGeminiChat(history, userMessage, systemPrompt);
+    const reply = await callGroqChat(history, userMessage, systemPrompt);
     return { text: reply, sources: [] };
   };
 
@@ -1180,7 +1172,7 @@ ${goals.length > 0 ? `Objetivos definidos:\n${goals.map(g => `- ${g.title}${g.ta
         ...prev.slice(0, -1),
         {
           role: 'assistant',
-          content: `Error al conectar con la IA: ${err.message || 'Asegúrate de tener VITE_GEMINI_API_KEY en GitHub Secrets y haber vuelto a hacer deploy.'}`,
+          content: `Error al conectar con la IA: ${err.message || 'Asegúrate de tener VITE_GROQ_API_KEY en GitHub Secrets y haber vuelto a hacer deploy.'}`,
           sources: [],
           calendarEvents: [],
         },

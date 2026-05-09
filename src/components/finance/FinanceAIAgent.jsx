@@ -49,6 +49,7 @@ async function callGemini(prompt, systemPrompt = '') {
 
 async function callGeminiChat(history, userMessage, systemPrompt = '') {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) throw new Error('VITE_GEMINI_API_KEY no configurada');
   const contents = [];
   // Inject system prompt as first user message if provided
   if (systemPrompt && history.length === 0) {
@@ -1179,7 +1180,7 @@ ${goals.length > 0 ? `Objetivos definidos:\n${goals.map(g => `- ${g.title}${g.ta
         ...prev.slice(0, -1),
         {
           role: 'assistant',
-          content: 'Error al conectar con la IA. Asegúrate de tener `VITE_GEMINI_API_KEY` configurada en GitHub Secrets.',
+          content: `Error al conectar con la IA: ${err.message || 'Asegúrate de tener VITE_GEMINI_API_KEY en GitHub Secrets y haber vuelto a hacer deploy.'}`,
           sources: [],
           calendarEvents: [],
         },

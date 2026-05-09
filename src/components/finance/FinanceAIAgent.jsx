@@ -9,7 +9,7 @@ import {
   Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
-  Search, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
+  Search, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, 
   Globe, Building2, Users, DollarSign, BarChart2, Newspaper,
   Calendar, ExternalLink, RefreshCw, BookOpen, Activity,
   ChevronUp, ChevronDown, Info

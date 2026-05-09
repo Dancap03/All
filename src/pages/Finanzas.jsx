@@ -7,7 +7,7 @@ import FinanceInvestTab from '@/components/finance/FinanceInvestTab';
 import FinanceSummaryTab from '@/components/finance/FinanceSummaryTab';
 import FinanceSearchTab from '@/components/finance/FinanceSearchTab';
 import FinanceAIAgent from '@/components/finance/FinanceAIAgent';
-
+ 
 export default function Finanzas() {
   return (
     <div className="p-6 space-y-4 animate-fade-in">

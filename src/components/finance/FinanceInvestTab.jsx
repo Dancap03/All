@@ -234,10 +234,15 @@ export default function FinanceInvestTab() {
   Object.values(typeGroups).forEach(g => { g.pct = g.value / totalVal; });
   const typeData = Object.values(typeGroups);
 
-  const positionData = positions.map(p => ({
+  const POSITION_COLORS = [
+    '#60a5fa','#34d399','#a78bfa','#f59e0b','#fb923c','#f87171',
+    '#6ee7b7','#c4b5fd','#fbbf24','#4ade80','#38bdf8','#e879f9',
+    '#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#ff6bff','#ffb347',
+  ];
+  const positionData = positions.map((p, i) => ({
     name: p.ticker,
     value: +(p.current_value_eur || p.invested_amount_eur || 0).toFixed(2),
-    color: getTypeInfo(p.investment_type).color,
+    color: POSITION_COLORS[i % POSITION_COLORS.length],
     pct: (p.current_value_eur || p.invested_amount_eur || 0) / totalVal,
   }));
 
@@ -277,7 +282,35 @@ export default function FinanceInvestTab() {
 
   const handleSelectResult = async (result) => {
     setSelectedResult(result);
-    setForm(f => ({ ...f, ticker: result.ticker, name: result.name }));
+
+    // Map Yahoo quoteType -> investment_type
+    const typeMap = {
+      'EQUITY': 'stock', 'ETF': 'etf', 'MUTUALFUND': 'index_fund',
+      'CRYPTOCURRENCY': 'crypto', 'BOND': 'bond', 'COMMODITY': 'commodity',
+      'FUTURE': 'commodity', 'INDEX': 'etf',
+    };
+    const investmentType = typeMap[result.type?.toUpperCase()] || 'stock';
+
+    // Auto-detect region from exchange
+    const regionMap = {
+      'NMS': 'América del Norte', 'NYQ': 'América del Norte', 'NGM': 'América del Norte',
+      'PCX': 'América del Norte', 'CBT': 'América del Norte', 'CME': 'América del Norte',
+      'BIT': 'Europa', 'FRA': 'Europa', 'EPA': 'Europa', 'AMS': 'Europa',
+      'LSE': 'Europa', 'STO': 'Europa', 'BME': 'Europa', 'VIE': 'Europa',
+      'TYO': 'Asia Pacífico', 'HKG': 'Asia Pacífico', 'SHG': 'Asia Pacífico',
+      'KSC': 'Asia Pacífico', 'BSE': 'Asia Pacífico', 'ASX': 'Asia Pacífico',
+      'CCY': 'Global', 'CCC': 'Global',
+    };
+    const autoRegion = regionMap[result.exchange] || '';
+
+    setForm(f => ({
+      ...f,
+      ticker: result.ticker,
+      name: result.name,
+      investment_type: investmentType,
+      region: autoRegion,
+    }));
+
     // Fetch price
     const quote = await getYahooQuote(result.ticker);
     if (quote) {

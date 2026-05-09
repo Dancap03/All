@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart3, PiggyBank, TrendingUp, LayoutDashboard } from 'lucide-react';
+import { BarChart3, PiggyBank, TrendingUp, LayoutDashboard, Search, Bot } from 'lucide-react';
 import FinanceDailyTab from '@/components/finance/FinanceDailyTab';
 import FinanceSavingsTab from '@/components/finance/FinanceSavingsTab';
 import FinanceInvestTab from '@/components/finance/FinanceInvestTab';
 import FinanceSummaryTab from '@/components/finance/FinanceSummaryTab';
+import FinanceSearchTab from '@/components/finance/FinanceSearchTab';
+import FinanceAIAgent from '@/components/finance/FinanceAIAgent';
 
 export default function Finanzas() {
   return (
@@ -17,18 +17,30 @@ export default function Finanzas() {
       </div>
 
       <Tabs defaultValue="summary" className="space-y-4">
-        <TabsList className="bg-muted/30 w-full grid grid-cols-4">
-          <TabsTrigger value="summary" className="data-[state=active]:bg-finance/20 data-[state=active]:text-finance gap-1.5 text-xs">
-            <LayoutDashboard className="w-3.5 h-3.5" /> Resumen
+        <TabsList className="bg-muted/30 w-full grid grid-cols-3 sm:grid-cols-6">
+          <TabsTrigger value="summary" className="data-[state=active]:bg-finance/20 data-[state=active]:text-finance gap-1 text-xs">
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Resumen</span>
           </TabsTrigger>
-          <TabsTrigger value="daily" className="data-[state=active]:bg-finance/20 data-[state=active]:text-finance gap-1.5 text-xs">
-            <BarChart3 className="w-3.5 h-3.5" /> Día a día
+          <TabsTrigger value="daily" className="data-[state=active]:bg-finance/20 data-[state=active]:text-finance gap-1 text-xs">
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Día a día</span>
           </TabsTrigger>
-          <TabsTrigger value="savings" className="data-[state=active]:bg-finance/20 data-[state=active]:text-finance gap-1.5 text-xs">
-            <PiggyBank className="w-3.5 h-3.5" /> Ahorro
+          <TabsTrigger value="savings" className="data-[state=active]:bg-finance/20 data-[state=active]:text-finance gap-1 text-xs">
+            <PiggyBank className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Ahorro</span>
           </TabsTrigger>
-          <TabsTrigger value="invest" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold gap-1.5 text-xs">
-            <TrendingUp className="w-3.5 h-3.5" /> Inversión
+          <TabsTrigger value="invest" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold gap-1 text-xs">
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Inversión</span>
+          </TabsTrigger>
+          <TabsTrigger value="search" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400 gap-1 text-xs">
+            <Search className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Buscador</span>
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold gap-1 text-xs">
+            <Bot className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">IA Agent</span>
           </TabsTrigger>
         </TabsList>
 
@@ -36,6 +48,8 @@ export default function Finanzas() {
         <TabsContent value="daily"><FinanceDailyTab /></TabsContent>
         <TabsContent value="savings"><FinanceSavingsTab /></TabsContent>
         <TabsContent value="invest"><FinanceInvestTab /></TabsContent>
+        <TabsContent value="search"><FinanceSearchTab /></TabsContent>
+        <TabsContent value="ai"><FinanceAIAgent /></TabsContent>
       </Tabs>
     </div>
   );

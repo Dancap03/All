@@ -116,28 +116,28 @@ export const base44 = {
       // InvokeLLM se usa en FinanceInvestTab para buscar precios.
       // Si no tienes VITE_ANTHROPIC_API_KEY en el .env simplemente devuelve {}.
       async InvokeLLM({ prompt }) {
-        const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+        const apiKey = import.meta.env.VITE_GROQ_API_KEY;
         if (!apiKey) return {};
 
         try {
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01',
+              'Authorization': `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-              model: 'claude-haiku-4-5-20251001',
+              model: 'llama-3.3-70b-versatile',
               max_tokens: 512,
+              temperature: 0.2,
               messages: [{
                 role: 'user',
-                content: `${prompt}\n\nResponde SOLO con un objeto JSON válido, sin texto adicional.`,
+                content: `${prompt}\n\nResponde SOLO con un objeto JSON válido, sin texto adicional ni bloques de código.`,
               }],
             }),
           });
           const data = await res.json();
-          const text = data?.content?.[0]?.text ?? '{}';
+          const text = data?.choices?.[0]?.message?.content ?? '{}';
           return JSON.parse(text.replace(/```json|```/g, '').trim());
         } catch {
           return {};

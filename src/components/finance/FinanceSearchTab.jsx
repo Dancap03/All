@@ -153,7 +153,7 @@ export default function FinanceSearchTab() {
   const fetchAIData = async (asset) => {
     setAiLoading(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
       const prompt = `Proporciona datos fundamentales sobre ${asset.ticker} (${asset.name}).
 Responde SOLO con JSON válido, sin texto adicional ni bloques de código markdown.
 Formato exacto:
@@ -186,16 +186,13 @@ Formato exacto:
   "key_risks": ["riesgo1", "riesgo2", "riesgo3"],
   "catalysts": ["catalizador1", "catalizador2"]
 }`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 1200, temperature: 0.3 },
-        }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 1200, temperature: 0.3, messages: [{ role: 'user', content: prompt }] }),
       });
       const d = await res.json();
-      const text = d?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const text = d?.choices?.[0]?.message?.content || '{}';
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
       setAiData(parsed);
     } catch { setAiData(null); }
@@ -206,7 +203,7 @@ Formato exacto:
   const fetchNews = async (ticker) => {
     setNewsLoading(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
       const prompt = `Lista las 5 noticias más recientes e importantes sobre ${ticker} de los últimos 30 días.
 Responde SOLO con JSON válido, sin texto adicional ni bloques de código markdown.
 Formato exacto:
@@ -219,16 +216,13 @@ Formato exacto:
     "source": "nombre del medio"
   }
 ]`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 1000, temperature: 0.5 },
-        }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 1000, temperature: 0.5, messages: [{ role: 'user', content: prompt }] }),
       });
       const d = await res.json();
-      const text = d?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+      const text = d?.choices?.[0]?.message?.content || '[]';
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
       setNews(Array.isArray(parsed) ? parsed : []);
     } catch { setNews([]); }
@@ -597,7 +591,7 @@ Formato exacto:
                 <Card className="glass-card">
                   <CardContent className="py-10 text-center text-muted-foreground text-sm">
                     No se pudieron cargar los datos fundamentales.
-                    <br /><span className="text-xs opacity-60">Requiere VITE_GEMINI_API_KEY en GitHub Secrets.</span>
+                    <br /><span className="text-xs opacity-60">Requiere VITE_GROQ_API_KEY en GitHub Secrets.</span>
                   </CardContent>
                 </Card>
               )}
@@ -717,7 +711,7 @@ Formato exacto:
                 <Card className="glass-card">
                   <CardContent className="py-10 text-center text-muted-foreground text-sm">
                     No hay noticias disponibles.
-                    <br /><span className="text-xs opacity-60">Requiere VITE_GEMINI_API_KEY en GitHub Secrets.</span>
+                    <br /><span className="text-xs opacity-60">Requiere VITE_GROQ_API_KEY en GitHub Secrets.</span>
                   </CardContent>
                 </Card>
               )}

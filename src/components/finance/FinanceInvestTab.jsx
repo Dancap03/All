@@ -1131,6 +1131,13 @@ export default function FinanceInvestTab() {
     setPortfolioHistory(history);
   }, [positions, portfolioRange]);
 
+  // Cerrar menú al clicar fuera — DEBE estar antes del if(loading) return
+  useEffect(() => {
+    const close = () => setOpenMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, []);
+
   // Sorted positions
   const sortedPositions = useMemo(() => {
     const arr = [...positions];
@@ -1327,13 +1334,6 @@ export default function FinanceInvestTab() {
     { id: 'dividends', label: 'Dividendos' },
     { id: 'ai', label: 'getquin IA' },
   ];
-
-  // Cerrar menú al clicar fuera
-  React.useEffect(() => {
-    const close = () => setOpenMenuId(null);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, []);
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", color: GQ.text, minHeight: '100vh' }}>

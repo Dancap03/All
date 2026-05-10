@@ -1017,57 +1017,219 @@ export default function FinanceInvestTab() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedResult, setSelectedResult] = useState(null);
   const [expandedPos, setExpandedPos] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'current', dir: 'desc' });
+  const [openMenuId, setOpenMenuId] = useState(null); // 3-dot menu
+  const [sales, setSales] = useState([]);
+  const [showSellModal, setShowSellModal] = useState(false);
+  const [sellAssetId, setSellAssetId] = useState('');
+  const [sellPriceInput, setSellPriceInput] = useState('');
+  const [sellAmountInput, setSellAmountInput] = useState('');
+  const [showAccountForm, setShowAccountForm] = useState(false);
+  const [accountForm, setAccountForm] = useState({ name: '', broker: '' });
+  const [accounts, setAccounts] = useState([]);
 
   const emptyForm = () => ({ ticker: '', name: '', investment_type: 'stock', invested_amount_eur: '', buy_price: '', currency: 'EUR', description: '', date: format(new Date(), 'yyyy-MM-dd'), sector: '', region: '', _fxRate: null, is_own_money: true });
   const [form, setForm] = useState(emptyForm());
 
   const fetchData = useCallback(async () => {
-    const [pos, txs] = await Promise.all([
+    const [pos, txs, sl, acc] = await Promise.all([
       base44.entities.InvestmentPosition.list('-created_date', 100),
       base44.entities.FinanceTransaction.list('-date', 1000),
+      base44.entities.InvestmentSale.list('-date', 200),
+      base44.entities.InvestmentAccount.list('-created_date', 50),
     ]);
-    setPositions(pos); setDailyTxs(txs); setLoading(false);
+    setPositions(pos); setDailyTxs(txs); setSales(sl); setAccounts(acc); setLoading(false);
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Build portfolio value history from purchase_history of all positions
+  // Build portfolio value history from real purchase_history
   useEffect(() => {
     if (positions.length === 0) { setPortfolioHistory([]); return; }
-    // Generate monthly data points based on when positions were bought
     const now = new Date();
-    const months = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push(d);
-    }
-    // For each month, sum up invested amount of positions bought on/before that month
-    const history = months.map(monthDate => {
-      let investedAtMonth = 0;
-      positions.forEach(pos => {
-        const posDate = pos.date ? new Date(pos.date) : null;
-        if (posDate && posDate <= monthDate) {
-          investedAtMonth += pos.invested_amount_eur || 0;
-        }
+
+    // Collect all buy events from purchase_history
+    const allBuys = [];
+    positions.forEach(pos => {
+      const gainRatio = (pos.buy_price > 0 && pos.current_price > 0)
+        ? pos.current_price / pos.buy_price
+        : (pos.invested_amount_eur > 0 ? (pos.current_value_eur || pos.invested_amount_eur) / pos.invested_amount_eur : 1);
+      const hist = pos.purchase_history?.length > 0
+        ? pos.purchase_history
+        : [{ date: pos.date, amount_eur: pos.invested_amount_eur, buy_price: pos.buy_price, currency: pos.currency }];
+      hist.forEach(h => {
+        if (!h.date || !h.amount_eur) return;
+        allBuys.push({
+          date: new Date(h.date),
+          amount: h.amount_eur || 0,
+          isOwn: pos.is_own_money !== false,
+          gainRatio,
+        });
       });
-      // Approximate current value at that point (linear interpolation)
-      const totalInv = positions.reduce((s, p) => s + (p.invested_amount_eur || 0), 0);
-      const totalCur = positions.reduce((s, p) => s + (p.current_value_eur || p.invested_amount_eur || 0), 0);
-      const ratio = totalInv > 0 ? totalCur / totalInv : 1;
-      // Earlier months have less gain (approximate)
-      const monthsAgo = Math.round((now - monthDate) / (1000 * 60 * 60 * 24 * 30));
-      const monthRatio = 1 + (ratio - 1) * (1 - monthsAgo / 12);
-      const valueAtMonth = investedAtMonth * Math.max(monthRatio, 0.8);
-      const rendAtMonth = investedAtMonth > 0 ? ((valueAtMonth - investedAtMonth) / investedAtMonth) * 100 : 0;
+    });
+    if (allBuys.length === 0) { setPortfolioHistory([]); return; }
+    allBuys.sort((a, b) => a.date - b.date);
+
+    // Determine range start and interval
+    const rangeMap = {
+      '1D': { ms: 86400000, interval: 'hour' },
+      '1W': { ms: 7*86400000, interval: 'day' },
+      '1M': { ms: 30*86400000, interval: 'day' },
+      'YTD': { ms: (now - new Date(now.getFullYear(),0,1)), interval: 'week' },
+      '1Y': { ms: 365*86400000, interval: 'week' },
+      'Max': { ms: null, interval: 'month' },
+    };
+    const cfg = rangeMap[portfolioRange] || rangeMap['Max'];
+    const startDate = cfg.ms ? new Date(now.getTime() - cfg.ms) : allBuys[0].date;
+
+    // Generate time points
+    const points = [];
+    let d = new Date(startDate);
+    const addStep = (d) => {
+      const n = new Date(d);
+      if (cfg.interval === 'hour') n.setHours(n.getHours() + 3);
+      else if (cfg.interval === 'day') n.setDate(n.getDate() + 1);
+      else if (cfg.interval === 'week') n.setDate(n.getDate() + 7);
+      else n.setMonth(n.getMonth() + 1);
+      return n;
+    };
+    while (d <= now) { points.push(new Date(d)); d = addStep(d); }
+    points.push(now);
+
+    const fmtDate = (d) => {
+      if (cfg.interval === 'hour') return format(d, 'HH:mm', { locale: es });
+      if (cfg.interval === 'day') return format(d, 'd MMM', { locale: es });
+      if (cfg.interval === 'week') return format(d, 'd MMM', { locale: es });
+      return format(d, 'MMM yy', { locale: es });
+    };
+
+    const history = points.map(point => {
+      let ownCapital = 0, notOwnCapital = 0, ownValue = 0, notOwnValue = 0;
+      allBuys.filter(b => b.date <= point).forEach(b => {
+        const totalMs = now - b.date;
+        const elapsedMs = point - b.date;
+        const progress = totalMs > 0 ? Math.min(elapsedMs / totalMs, 1) : 1;
+        const gainAtPoint = 1 + (b.gainRatio - 1) * progress;
+        const valAtPoint = b.amount * gainAtPoint;
+        if (b.isOwn) { ownCapital += b.amount; ownValue += valAtPoint; }
+        else { notOwnCapital += b.amount; notOwnValue += valAtPoint; }
+      });
+      const totalCapital = ownCapital + notOwnCapital;
+      const totalValue = ownValue + notOwnValue;
+      const rendProp = ownCapital > 0 ? ((ownValue - ownCapital) / ownCapital) * 100 : 0;
+      const rendTotal = totalCapital > 0 ? ((totalValue - totalCapital) / totalCapital) * 100 : 0;
       return {
-        date: format(monthDate, 'dd MMM', { locale: es }),
-        fullDate: format(monthDate, "dd. MMM yyyy"),
-        valor: +valueAtMonth.toFixed(2),
-        capital: +investedAtMonth.toFixed(2),
-        rendimiento: +rendAtMonth.toFixed(2),
+        date: fmtDate(point),
+        fullDate: format(point, "d 'de' MMMM yyyy", { locale: es }),
+        valor: +totalValue.toFixed(2),
+        capital: +totalCapital.toFixed(2),
+        ownCapital: +ownCapital.toFixed(2),
+        ownValue: +ownValue.toFixed(2),
+        rendimientoProp: +rendProp.toFixed(2),
+        rendimientoTotal: +rendTotal.toFixed(2),
       };
     });
     setPortfolioHistory(history);
-  }, [positions]);
+  }, [positions, portfolioRange]);
+
+  // Sorted positions
+  const sortedPositions = useMemo(() => {
+    const arr = [...positions];
+    const { key, dir } = sortConfig;
+    arr.sort((a, b) => {
+      let av, bv;
+      if (key === 'name') { av = a.ticker || ''; bv = b.ticker || ''; }
+      else if (key === 'buy') { av = a.invested_amount_eur || 0; bv = b.invested_amount_eur || 0; }
+      else if (key === 'current') { av = a.current_value_eur || a.invested_amount_eur || 0; bv = b.current_value_eur || b.invested_amount_eur || 0; }
+      else if (key === 'gain') { av = getGain(a); bv = getGain(b); }
+      else if (key === 'gainPct') { av = getGainPct(a); bv = getGainPct(b); }
+      else { av = 0; bv = 0; }
+      if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return dir === 'asc' ? av - bv : bv - av;
+    });
+    return arr;
+  }, [positions, sortConfig]);
+
+  const toggleSort = (key) => {
+    setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }));
+  };
+  const SortArrow = ({ k }) => {
+    if (sortConfig.key !== k) return <span style={{ color: GQ.textDim }}>↕</span>;
+    return <span style={{ color: GQ.text }}>{sortConfig.dir === 'desc' ? '↓' : '↑'}</span>;
+  };
+
+  // Handle sell with saving to DB
+  const handleSellWithSave = async () => {
+    const pos = positions.find(p => p.id === sellAssetId);
+    if (!pos || !sellAmountInput) return;
+    const amount = parseFloat(sellAmountInput);
+    const sellPriceVal = parseFloat(sellPriceInput) || pos.current_price || 0;
+    const cur = pos.current_value_eur || pos.invested_amount_eur || 0;
+    if (amount > cur) { alert('Cantidad mayor al valor actual'); return; }
+    const ratio = amount / cur;
+    const gainOnSale = amount - (pos.invested_amount_eur || 0) * ratio;
+    const gainPctOnSale = (pos.invested_amount_eur || 0) * ratio > 0
+      ? (gainOnSale / ((pos.invested_amount_eur || 0) * ratio)) * 100 : 0;
+    // Save sale
+    await base44.entities.InvestmentSale.create({
+      position_id: pos.id,
+      ticker: pos.ticker,
+      name: pos.name,
+      amount_eur: amount,
+      sell_price: sellPriceVal,
+      buy_price: pos.buy_price || 0,
+      date: sellDate,
+      gain_eur: +gainOnSale.toFixed(2),
+      gain_pct: +gainPctOnSale.toFixed(2),
+      investment_type: pos.investment_type,
+    });
+    // Update position
+    await base44.entities.InvestmentPosition.update(pos.id, {
+      current_value_eur: +(cur - amount).toFixed(2),
+      invested_amount_eur: +((pos.invested_amount_eur || 0) * (1 - ratio)).toFixed(2),
+    });
+    setShowSellModal(false); setSellAssetId(''); setSellAmountInput(''); setSellPriceInput('');
+    fetchData();
+  };
+
+  // Handle create account
+  const handleCreateAccount = async () => {
+    if (!accountForm.name.trim()) return;
+    await base44.entities.InvestmentAccount.create({ name: accountForm.name, broker: accountForm.broker, created_date: new Date().toISOString() });
+    setShowAccountForm(false); setAccountForm({ name: '', broker: '' });
+    fetchData();
+  };
+
+  // Build all transactions from purchase_history for display
+  const allTransactions = useMemo(() => {
+    const txs = [];
+    positions.forEach(pos => {
+      const hist = pos.purchase_history?.length > 0
+        ? pos.purchase_history
+        : [{ date: pos.date, amount_eur: pos.invested_amount_eur, buy_price: pos.buy_price, currency: pos.currency }];
+      hist.forEach((h, i) => {
+        if (!h?.amount_eur) return;
+        txs.push({ id: `${pos.id}_buy_${i}`, type: 'buy', ticker: pos.ticker, name: pos.name, date: h.date, amount: h.amount_eur, price: h.buy_price, currency: h.currency || pos.currency, posId: pos.id, investment_type: pos.investment_type });
+      });
+    });
+    sales.forEach(s => {
+      txs.push({ id: s.id, type: 'sell', ticker: s.ticker, name: s.name, date: s.date, amount: s.amount_eur, price: s.sell_price, gain: s.gain_eur, gainPct: s.gain_pct, saleId: s.id });
+    });
+    txs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return txs;
+  }, [positions, sales]);
+
+  const groupedTransactions = useMemo(() => {
+    const groups = {};
+    allTransactions.forEach(tx => {
+      const key = tx.date ? tx.date.slice(0, 7) : 'unknown';
+      if (!groups[key]) groups[key] = { key, label: tx.date ? format(new Date(tx.date + 'T12:00:00'), 'MMMM yyyy', { locale: es }) : 'Sin fecha', txs: [] };
+      groups[key].txs.push(tx);
+    });
+    return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
+  }, [allTransactions]);
+
+  const getGain = (pos) => (pos.current_value_eur || pos.invested_amount_eur || 0) - (pos.invested_amount_eur || 0);
+  const getGainPct = (pos) => { const inv = pos.invested_amount_eur || 0; return inv === 0 ? 0 : (getGain(pos) / inv) * 100; };
 
   const dailyIncome = dailyTxs.filter(t => ['income', 'transfer_from_savings', 'transfer_from_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);
   const dailyOut = dailyTxs.filter(t => ['expense', 'other', 'transfer_to_savings', 'transfer_to_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);
@@ -1076,9 +1238,6 @@ export default function FinanceInvestTab() {
   const totalCurrentValue = positions.reduce((s, p) => s + (p.current_value_eur || p.invested_amount_eur || 0), 0);
   const totalGain = totalCurrentValue - totalInvested;
   const totalGainPct = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
-  const getGain = (pos) => (pos.current_value_eur || pos.invested_amount_eur || 0) - (pos.invested_amount_eur || 0);
-  const getGainPct = (pos) => { const inv = pos.invested_amount_eur || 0; return inv === 0 ? 0 : (getGain(pos) / inv) * 100; };
-
   const handleSearch = async () => { if (!searchQuery.trim()) return; setSearchLoading(true); setSearchResults([]); const r = await searchYahoo(searchQuery); setSearchResults(r); setSearchLoading(false); };
   const handleSelectResult = async (result) => {
     setSelectedResult(result);
@@ -1169,6 +1328,13 @@ export default function FinanceInvestTab() {
     { id: 'ai', label: 'getquin IA' },
   ];
 
+  // Cerrar menú al clicar fuera
+  React.useEffect(() => {
+    const close = () => setOpenMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, []);
+
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", color: GQ.text, minHeight: '100vh' }}>
 
@@ -1178,9 +1344,9 @@ export default function FinanceInvestTab() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <h2 style={{ fontSize: 20, fontWeight: 800, color: GQ.text, margin: 0 }}>Cartera de inversiones</h2>
-              <button onClick={() => { setEditingPos(null); setForm(emptyForm()); setSearchQuery(''); setSearchResults([]); setSelectedResult(null); setShowForm(true); }}
+              <button onClick={() => setShowAccountForm(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.text, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-                + Agregar cuenta
+                + Agregar cuenta {accounts.length > 0 ? `(${accounts.length})` : ''}
               </button>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1271,11 +1437,20 @@ export default function FinanceInvestTab() {
                             </div>
                           </>
                         ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.green }} />
-                            <span style={{ color: GQ.textMuted, fontSize: 11 }}>Rendimiento</span>
-                            <span style={{ color: (d?.rendimiento || 0) >= 0 ? GQ.green : GQ.red, fontWeight: 700, marginLeft: 'auto' }}>{(d?.rendimiento || 0) >= 0 ? '+' : ''}{(d?.rendimiento || 0).toFixed(2)}%</span>
-                          </div>
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.green }} />
+                              <span style={{ color: GQ.textMuted, fontSize: 11 }}>Dinero propio</span>
+                              <span style={{ color: (d?.rendimientoProp || 0) >= 0 ? GQ.green : GQ.red, fontWeight: 700, marginLeft: 'auto' }}>{(d?.rendimientoProp || 0) >= 0 ? '+' : ''}{(d?.rendimientoProp || 0).toFixed(2)}%</span>
+                            </div>
+                            {d?.rendimientoTotal !== d?.rendimientoProp && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.blue }} />
+                                <span style={{ color: GQ.textMuted, fontSize: 11 }}>Total (incl. regalos)</span>
+                                <span style={{ color: (d?.rendimientoTotal || 0) >= 0 ? GQ.blue : GQ.red, fontWeight: 600, marginLeft: 'auto' }}>{(d?.rendimientoTotal || 0) >= 0 ? '+' : ''}{(d?.rendimientoTotal || 0).toFixed(2)}%</span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     );
@@ -1283,12 +1458,17 @@ export default function FinanceInvestTab() {
                 />
                 {/* Capital line (dashed gray) - only in valor mode */}
                 {portfolioMode === 'valor' && (
-                  <Line type="monotone" dataKey="capital" stroke={GQ.textMuted} strokeWidth={1} strokeDasharray="4 3" dot={false} />
+                  <Line type="monotone" dataKey="capital" stroke={GQ.textMuted} strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
                 )}
-                {/* Main value/rendimiento line */}
+                {/* Rendimiento: dinero propio */}
+                {portfolioMode === 'rendimiento' && (
+                  <Area type="monotone" dataKey="rendimientoTotal" stroke={GQ.blue} strokeWidth={1.5} strokeDasharray="5 4" fill="none" dot={false}
+                    activeDot={{ r: 4, fill: GQ.blue, stroke: GQ.card, strokeWidth: 2 }} />
+                )}
+                {/* Main line: valor total o rendimientoProp */}
                 <Area
                   type="monotone"
-                  dataKey={portfolioMode === 'rendimiento' ? 'rendimiento' : 'valor'}
+                  dataKey={portfolioMode === 'rendimiento' ? 'rendimientoProp' : 'valor'}
                   stroke={GQ.green}
                   fill="url(#gqMainGrad)"
                   strokeWidth={2}
@@ -1318,10 +1498,6 @@ export default function FinanceInvestTab() {
           {/* Chart type selector */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button onClick={() => { setEditingPos(null); setForm(emptyForm()); setSearchQuery(''); setSearchResults([]); setSelectedResult(null); setShowForm(true); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.text, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-                + Agregar transacción
-              </button>
               <button onClick={handleRefreshPrices} disabled={refreshing || positions.length === 0}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 10, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.textMuted, fontSize: 12, cursor: 'pointer' }}>
                 <RefreshCw style={{ width: 13, height: 13, animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
@@ -1358,33 +1534,37 @@ export default function FinanceInvestTab() {
               ))}
             </div>
 
-            {/* Table header */}
+            {/* Table header - sortable */}
             <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr 32px', gap: 0, padding: '10px 20px', borderBottom: `1px solid ${GQ.border}` }}>
-              {[{ label: 'Título', align: 'left' }, { label: 'Comprar en', align: 'right' }, { label: 'Posición', align: 'right' }, { label: 'P/L', align: 'right' }, { label: '', align: 'right' }].map((h, i) => (
-                <div key={i} style={{ fontSize: 11, color: GQ.textMuted, fontWeight: 500, textAlign: h.align, display: 'flex', alignItems: 'center', justifyContent: h.align === 'right' ? 'flex-end' : 'flex-start', gap: 3 }}>
-                  {h.label}{h.label && <span style={{ color: GQ.textDim }}>↓</span>}
-                </div>
+              {[
+                { label: 'Título', key: 'name', align: 'left' },
+                { label: 'Comprar en', key: 'buy', align: 'right' },
+                { label: 'Posición', key: 'current', align: 'right' },
+                { label: 'P/L', key: 'gainPct', align: 'right' },
+                { label: '', key: null, align: 'right' },
+              ].map((h, i) => (
+                <button key={i} onClick={() => h.key && toggleSort(h.key)}
+                  style={{ fontSize: 11, color: GQ.textMuted, fontWeight: 500, textAlign: h.align, display: 'flex', alignItems: 'center', justifyContent: h.align === 'right' ? 'flex-end' : 'flex-start', gap: 4, background: 'none', border: 'none', cursor: h.key ? 'pointer' : 'default', padding: 0 }}>
+                  {h.label}{h.key && <SortArrow k={h.key} />}
+                </button>
               ))}
             </div>
 
-            {positions.length === 0 ? (
+            {sortedPositions.length === 0 ? (
               <div style={{ padding: '60px 20px', textAlign: 'center', color: GQ.textMuted }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>📈</div>
                 <div style={{ fontSize: 14 }}>Sin posiciones aún</div>
                 <div style={{ fontSize: 12, color: GQ.textDim, marginTop: 6 }}>Añade tu primera inversión</div>
               </div>
             ) : (
-              positions.map(pos => {
+              sortedPositions.map(pos => {
                 const gain = getGain(pos);
                 const gainPct = getGainPct(pos);
                 const cur = pos.current_value_eur || pos.invested_amount_eur || 0;
                 const typeInfo = getType(pos.investment_type);
-                const isExpanded = expandedPos === pos.id;
-
                 return (
                   <div key={pos.id}>
-                    <div onClick={() => setExpandedPos(isExpanded ? null : pos.id)}
-                      style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr 32px', gap: 0, padding: '14px 20px', borderBottom: `1px solid ${GQ.border}`, cursor: 'pointer', alignItems: 'center', transition: 'background 0.1s' }}
+                    <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr 1fr 32px', gap: 0, padding: '14px 20px', borderBottom: `1px solid ${GQ.border}`, alignItems: 'center', transition: 'background 0.1s' }}
                       onMouseEnter={e => e.currentTarget.style.background = GQ.cardHover}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
 
@@ -1421,85 +1601,153 @@ export default function FinanceInvestTab() {
                         </div>
                       </div>
 
-                      {/* Expand */}
-                      <div style={{ display: 'flex', justifyContent: 'center' }}>
-                        {isExpanded ? <ChevronDown style={{ width: 14, height: 14, color: GQ.textMuted }} /> : <ChevronRight style={{ width: 14, height: 14, color: GQ.textMuted }} />}
+                      {/* 3-dot menu */}
+                      <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+                        <button onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === pos.id ? null : pos.id); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: GQ.textMuted, padding: '4px 6px', borderRadius: 6, display: 'flex', alignItems: 'center' }}>
+                          ⋮
+                        </button>
+                        {openMenuId === pos.id && (
+                          <div onClick={e => e.stopPropagation()}
+                            style={{ position: 'absolute', right: 0, top: '100%', zIndex: 50, background: '#1a1f2e', border: `1px solid ${GQ.border}`, borderRadius: 10, padding: '4px 0', minWidth: 120, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                            <button onClick={() => { setEditingPos(pos); setForm({ ...emptyForm(), ticker: pos.ticker, name: pos.name, investment_type: pos.investment_type, currency: pos.currency || 'EUR', sector: pos.sector || '', region: pos.region || '' }); setShowForm(true); setOpenMenuId(null); }}
+                              style={{ width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', color: GQ.text, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                              onMouseEnter={e => e.currentTarget.style.background = GQ.cardHover}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                              ✏️ Editar
+                            </button>
+                            <button onClick={() => { setDeleteId(pos.id); setOpenMenuId(null); }}
+                              style={{ width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', color: GQ.red, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                              onMouseEnter={e => e.currentTarget.style.background = GQ.redDim}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                              🗑️ Borrar
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Expanded row - action buttons */}
-                    {isExpanded && (
-                      <div style={{ background: '#0a0a0f', padding: '14px 20px', borderBottom: `1px solid ${GQ.border}` }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
-                          {[
-                            { label: 'Invertido', value: `${(pos.invested_amount_eur || 0).toFixed(2)} €` },
-                            { label: 'Valor actual', value: `${cur.toFixed(2)} €` },
-                            { label: 'Asignación', value: `${totalCurrentValue > 0 ? ((cur / totalCurrentValue) * 100).toFixed(1) : 0}%` },
-                            { label: 'Sector', value: pos.sector || '—' },
-                            { label: 'Región', value: pos.region || '—' },
-                            { label: 'Tipo', value: getType(pos.investment_type).label },
-                          ].map(item => (
-                            <div key={item.label}>
-                              <div style={{ fontSize: 10, color: GQ.textDim, marginBottom: 2 }}>{item.label}</div>
-                              <div style={{ fontSize: 12, color: GQ.textMuted, fontWeight: 500 }}>{item.value}</div>
-                            </div>
-                          ))}
-                        </div>
-                        {pos.last_updated && <div style={{ fontSize: 10, color: GQ.textDim, marginBottom: 12 }}>Actualizado: {format(new Date(pos.last_updated), 'd MMM yyyy HH:mm', { locale: es })}</div>}
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {[
-                            { label: 'Ver gráfico', action: () => openViewPos(pos), bg: GQ.blueDim, tc: '#93c5fd' },
-                            { label: 'Añadir compra', action: () => { setEditingPos(pos); setForm({ ...emptyForm(), ticker: pos.ticker, name: pos.name, investment_type: pos.investment_type, currency: pos.currency || 'EUR', sector: pos.sector || '', region: pos.region || '' }); setShowForm(true); setExpandedPos(null); }, bg: '#1f2937', tc: GQ.text },
-                            { label: 'Vender', action: () => { setSellPos(pos); setSellAmount(''); setShowSellForm(true); setExpandedPos(null); }, bg: GQ.greenDim, tc: GQ.green },
-                            { label: 'Editar precio', action: () => { setEditPricePos(pos); setEditPriceForm({ current_price: pos.current_price || '', current_value_eur: pos.current_value_eur || '' }); setShowPriceEdit(true); setExpandedPos(null); }, bg: '#1f2937', tc: GQ.textMuted },
-                            { label: 'Eliminar', action: () => { setDeleteId(pos.id); setExpandedPos(null); }, bg: GQ.redDim, tc: GQ.red },
-                          ].map(btn => (
-                            <button key={btn.label} onClick={e => { e.stopPropagation(); btn.action(); }}
-                              style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: btn.bg, color: btn.tc, fontSize: 11, cursor: 'pointer', fontWeight: 500 }}>
-                              {btn.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+
                   </div>
                 );
               })
             )}
           </div>
 
-          {/* Sold */}
+          {/* Sold — datos reales desde Firebase */}
           <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: '16px 20px', marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: GQ.text }}>Vendido</span>
-              <button style={{ fontSize: 12, color: GQ.textMuted, background: 'none', border: 'none', cursor: 'pointer' }}>Ver más</button>
-            </div>
-            <div style={{ fontSize: 12, color: GQ.textDim, marginTop: 8 }}>No hay ventas registradas</div>
-          </div>
-
-          {/* Transactions */}
-          <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: '16px 20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: GQ.text }}>Transacciones</span>
-              <button onClick={() => { setEditingPos(null); setForm(emptyForm()); setSearchQuery(''); setSearchResults([]); setSelectedResult(null); setShowForm(true); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.text, fontSize: 12, cursor: 'pointer' }}>
-                + Agregar transacción
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: GQ.text }}>Vendido</span>
+              <button
+                onClick={() => { setSellAssetId(positions[0]?.id || ''); setSellAmountInput(''); setSellPriceInput(''); setShowSellModal(true); }}
+                disabled={positions.length === 0}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: `1px solid ${GQ.green}44`, background: GQ.greenDim, color: GQ.green, fontSize: 12, cursor: positions.length === 0 ? 'not-allowed' : 'pointer', opacity: positions.length === 0 ? 0.4 : 1 }}>
+                + Vender posición
               </button>
             </div>
-            {positions.length === 0 ? (
-              <div style={{ fontSize: 12, color: GQ.textDim }}>Sin transacciones</div>
+            {sales.length === 0 ? (
+              <div style={{ fontSize: 12, color: GQ.textDim }}>No hay ventas registradas</div>
             ) : (
-              positions.map((pos, i) => (
-                <div key={pos.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < positions.length - 1 ? `1px solid ${GQ.border}` : 'none' }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.blue, flexShrink: 0 }} />
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: GQ.border, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: GQ.textMuted, flexShrink: 0 }}>{pos.ticker?.slice(0, 3)}</div>
+              sales.slice(0, 5).map((sale, i) => (
+                <div key={sale.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < Math.min(sales.length, 5) - 1 ? `1px solid ${GQ.border}` : 'none' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: GQ.redDim, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: GQ.red, flexShrink: 0 }}>{sale.ticker?.slice(0, 4)}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, color: GQ.text, fontWeight: 500 }}>Compró {pos.purchase_history?.length || 1} a {pos.buy_price?.toFixed(2) || 0} €</div>
-                    <div style={{ fontSize: 11, color: GQ.textMuted }}>{pos.date ? format(new Date(pos.date), 'd MMM yyyy', { locale: es }) : '—'}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: GQ.text }}>{sale.name || sale.ticker}</div>
+                    <div style={{ fontSize: 11, color: GQ.textMuted }}>{sale.date ? format(new Date(sale.date + 'T12:00:00'), 'd MMM yyyy', { locale: es }) : '—'} · {sale.sell_price ? `${sale.sell_price.toFixed(2)} €/u` : ''}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: GQ.text }}>{(pos.invested_amount_eur || 0).toFixed(2)} €</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: GQ.text }}>{(sale.amount_eur || 0).toFixed(2)} €</div>
+                    <div style={{ fontSize: 11, color: (sale.gain_eur || 0) >= 0 ? GQ.green : GQ.red }}>
+                      {(sale.gain_eur || 0) >= 0 ? '+' : ''}{(sale.gain_eur || 0).toFixed(2)} € ({(sale.gain_pct || 0).toFixed(2)}%)
+                    </div>
                   </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Transacciones — estilo getquin, agrupadas por mes */}
+          <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${GQ.border}` }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: GQ.text }}>Transacciones</span>
+            </div>
+            {allTransactions.length === 0 ? (
+              <div style={{ padding: '24px 20px', fontSize: 12, color: GQ.textDim }}>Sin transacciones</div>
+            ) : (
+              groupedTransactions.map(group => (
+                <div key={group.key}>
+                  {/* Month header */}
+                  <div style={{ padding: '10px 20px', background: '#0d0d14', fontSize: 12, fontWeight: 600, color: GQ.textMuted, textTransform: 'capitalize' }}>
+                    {group.label}
+                  </div>
+                  {group.txs.map((tx, i) => {
+                    const isBuy = tx.type === 'buy';
+                    const dayStr = tx.date ? format(new Date(tx.date + 'T12:00:00'), 'dd', { locale: es }) : '—';
+                    const monthStr = tx.date ? format(new Date(tx.date + 'T12:00:00'), 'MM', { locale: es }) : '';
+                    return (
+                      <div key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: `1px solid ${GQ.border}`, position: 'relative' }}
+                        onMouseEnter={e => e.currentTarget.style.background = GQ.cardHover}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        {/* Date */}
+                        <div style={{ minWidth: 36, textAlign: 'center', flexShrink: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: GQ.text, lineHeight: 1 }}>{dayStr}</div>
+                          <div style={{ fontSize: 9, color: GQ.textMuted }}>
+                            {isBuy ? '→' : '←'}
+                          </div>
+                        </div>
+                        {/* Logo */}
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: isBuy ? `${GQ.blue}18` : `${GQ.green}18`, border: `1px solid ${isBuy ? GQ.blue : GQ.green}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: isBuy ? '#93c5fd' : GQ.green, flexShrink: 0 }}>
+                          {tx.ticker?.slice(0, 4)}
+                        </div>
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: GQ.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.name || tx.ticker}</div>
+                          <div style={{ fontSize: 11, color: GQ.textMuted }}>
+                            {isBuy
+                              ? `Compró ${tx.price ? `${tx.price.toFixed(4)} a ${tx.price.toFixed(2)} €` : ''}`
+                              : `Vendió a ${tx.price ? `${tx.price.toFixed(2)} €` : '—'}`}
+                          </div>
+                        </div>
+                        {/* Amount */}
+                        <div style={{ textAlign: 'right', marginRight: 8 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: isBuy ? GQ.text : GQ.green }}>
+                            {isBuy ? '' : '+'}{(tx.amount || 0).toFixed(2)} €
+                          </div>
+                        </div>
+                        {/* 3-dot for edit */}
+                        <div style={{ position: 'relative' }}>
+                          <button onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === tx.id ? null : tx.id); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: GQ.textMuted, padding: '4px 6px', fontSize: 18, lineHeight: 1 }}>
+                            ⋮
+                          </button>
+                          {openMenuId === tx.id && (
+                            <div onClick={e => e.stopPropagation()}
+                              style={{ position: 'absolute', right: 0, top: '100%', zIndex: 50, background: '#1a1f2e', border: `1px solid ${GQ.border}`, borderRadius: 10, padding: '4px 0', minWidth: 130, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                              {isBuy && tx.posId && (
+                                <button onClick={() => {
+                                  const pos = positions.find(p => p.id === tx.posId);
+                                  if (pos) { setEditingPos(pos); setForm({ ...emptyForm(), ticker: pos.ticker, name: pos.name, investment_type: pos.investment_type, currency: pos.currency || 'EUR', sector: pos.sector || '', region: pos.region || '' }); setShowForm(true); setOpenMenuId(null); }
+                                }}
+                                  style={{ width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', color: GQ.text, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                                  onMouseEnter={e => e.currentTarget.style.background = GQ.cardHover}
+                                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                  ✏️ Editar
+                                </button>
+                              )}
+                              {!isBuy && tx.saleId && (
+                                <button onClick={async () => { await base44.entities.InvestmentSale.delete(tx.saleId); setOpenMenuId(null); fetchData(); }}
+                                  style={{ width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', color: GQ.red, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                                  onMouseEnter={e => e.currentTarget.style.background = GQ.redDim}
+                                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                  🗑️ Borrar
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ))
             )}
@@ -1725,6 +1973,86 @@ export default function FinanceInvestTab() {
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => { setShowPriceEdit(false); setEditPricePos(null); }} className="flex-1 border-border">Cancelar</Button>
               <Button onClick={handleSavePrice} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">Guardar</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Crear cuenta/cartera */}
+      <Dialog open={showAccountForm} onOpenChange={v => { if (!v) setShowAccountForm(false); }}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader><DialogTitle className="text-foreground">Nueva cartera</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label style={{ fontSize: 12, color: GQ.textMuted, display: 'block', marginBottom: 6 }}>Nombre de la cartera</label>
+              <Input value={accountForm.name} onChange={e => setAccountForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Ej: Mi Cartera Principal, Trade Republic..." className="bg-background/50 border-border" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: GQ.textMuted, display: 'block', marginBottom: 6 }}>Broker (opcional)</label>
+              <Input value={accountForm.broker} onChange={e => setAccountForm(f => ({ ...f, broker: e.target.value }))}
+                placeholder="DEGIRO, Interactive Brokers..." className="bg-background/50 border-border" />
+            </div>
+            {accounts.length > 0 && (
+              <div style={{ borderTop: `1px solid ${GQ.border}`, paddingTop: 10 }}>
+                <div style={{ fontSize: 11, color: GQ.textMuted, marginBottom: 6 }}>Carteras existentes:</div>
+                {accounts.map(a => (
+                  <div key={a.id} style={{ fontSize: 12, color: GQ.text, padding: '5px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>📁 {a.name}{a.broker ? ` · ${a.broker}` : ''}</span>
+                    <button onClick={async () => { await base44.entities.InvestmentAccount.delete(a.id); fetchData(); }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: GQ.red, fontSize: 12 }}>🗑️</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+              <Button variant="outline" onClick={() => setShowAccountForm(false)} className="flex-1 border-border">Cancelar</Button>
+              <Button onClick={handleCreateAccount} disabled={!accountForm.name.trim()} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">Crear cartera</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Vender posición */}
+      <Dialog open={showSellModal} onOpenChange={v => { if (!v) setShowSellModal(false); }}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader><DialogTitle className="text-foreground">Vender posición</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label style={{ fontSize: 12, color: GQ.textMuted, display: 'block', marginBottom: 6 }}>Activo a vender</label>
+              <select value={sellAssetId} onChange={e => setSellAssetId(e.target.value)}
+                style={{ width: '100%', background: '#0a0a0f', border: `1px solid ${GQ.border}`, borderRadius: 10, padding: '9px 12px', color: GQ.text, fontSize: 13, outline: 'none' }}>
+                {positions.map(p => (
+                  <option key={p.id} value={p.id}>{p.ticker} — {(p.current_value_eur || p.invested_amount_eur || 0).toFixed(2)} €</option>
+                ))}
+              </select>
+            </div>
+            {sellAssetId && (() => {
+              const pos = positions.find(p => p.id === sellAssetId);
+              return pos ? (
+                <div style={{ background: '#0a0a0f', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: GQ.textMuted }}>
+                  Disponible: <span style={{ color: GQ.text, fontWeight: 700 }}>{(pos.current_value_eur || pos.invested_amount_eur || 0).toFixed(2)} €</span>
+                  {pos.current_price ? ` · Precio actual: ${pos.current_price.toFixed(2)} ${pos.currency}` : ''}
+                </div>
+              ) : null;
+            })()}
+            <div>
+              <label style={{ fontSize: 12, color: GQ.textMuted, display: 'block', marginBottom: 6 }}>Precio de venta ({positions.find(p => p.id === sellAssetId)?.currency || 'EUR'})</label>
+              <Input type="number" value={sellPriceInput} onChange={e => setSellPriceInput(e.target.value)}
+                placeholder="0.00" className="bg-background/50 border-border" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: GQ.textMuted, display: 'block', marginBottom: 6 }}>Cantidad vendida (€)</label>
+              <Input type="number" value={sellAmountInput} onChange={e => setSellAmountInput(e.target.value)}
+                placeholder="0.00" className="bg-background/50 border-border" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: GQ.textMuted, display: 'block', marginBottom: 6 }}>Fecha</label>
+              <Input type="date" value={sellDate} onChange={e => setSellDate(e.target.value)} className="bg-background/50 border-border [color-scheme:dark]" />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="outline" onClick={() => setShowSellModal(false)} className="flex-1 border-border">Cancelar</Button>
+              <Button onClick={handleSellWithSave} disabled={!sellAssetId || !sellAmountInput} className="flex-1 bg-green-600 hover:bg-green-700 text-white">Confirmar venta</Button>
             </div>
           </div>
         </DialogContent>

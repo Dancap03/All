@@ -11,7 +11,7 @@ import { Plus, RefreshCw, TrendingUp, TrendingDown, Search, X, ChevronRight, Che
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// ─── Groq ─────────────────────────────────────────────────────────────────────
+// ─── Groq ───────────────────────────────────────────────────────────────────── 
 async function callGroq(messages, maxTokens = 1500) {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
   if (!apiKey) throw new Error('VITE_GROQ_API_KEY no configurada');

@@ -104,6 +104,8 @@ export const base44 = {
     ProjectTask:        makeEntity('projectTasks'),
     Goal:               makeEntity('goals'),
     Note:               makeEntity('notes'),
+    InvestmentSale:     makeEntity('investmentSales'),
+    InvestmentAccount:  makeEntity('investmentAccounts'),
   },
 
   // stub para que no rompa si algo lo referencia

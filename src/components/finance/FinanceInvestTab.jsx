@@ -62,6 +62,160 @@ async function getEurFxRate(currency) {
   } catch { return { USD: 0.92, GBP: 1.17, CHF: 1.06 }[currency] || null; }
 }
 
+
+// ─── ETF composition (via ETF.com scraping proxy) ────────────────────────────
+// Known ETF compositions for common ETFs
+const ETF_COMPOSITIONS = {
+  'IWDA': [
+    { ticker: 'AAPL', name: 'Apple Inc.', pct: 4.2, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'MSFT', name: 'Microsoft Corp.', pct: 3.8, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'NVDA', name: 'NVIDIA Corp.', pct: 3.1, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AMZN', name: 'Amazon.com Inc.', pct: 2.4, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'GOOGL', name: 'Alphabet Inc. A', pct: 2.1, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'META', name: 'Meta Platforms', pct: 1.3, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'TSLA', name: 'Tesla Inc.', pct: 1.0, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AVGO', name: 'Broadcom Inc.', pct: 0.9, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'JPM', name: 'JPMorgan Chase', pct: 0.9, region: 'América del Norte', sector: 'Finanzas', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'LLY', name: 'Eli Lilly', pct: 0.8, region: 'América del Norte', sector: 'Salud', country: 'EE.UU.', currency: 'USD' },
+  ],
+  'VUSA': [
+    { ticker: 'AAPL', name: 'Apple Inc.', pct: 7.2, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'MSFT', name: 'Microsoft Corp.', pct: 6.5, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'NVDA', name: 'NVIDIA Corp.', pct: 5.3, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AMZN', name: 'Amazon.com Inc.', pct: 4.0, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'GOOGL', name: 'Alphabet Inc. A', pct: 3.5, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'META', name: 'Meta Platforms', pct: 2.1, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'TSLA', name: 'Tesla Inc.', pct: 1.7, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AVGO', name: 'Broadcom Inc.', pct: 1.5, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'JPM', name: 'JPMorgan Chase', pct: 1.4, region: 'América del Norte', sector: 'Finanzas', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'LLY', name: 'Eli Lilly', pct: 1.3, region: 'América del Norte', sector: 'Salud', country: 'EE.UU.', currency: 'USD' },
+  ],
+  'VUAG': [
+    { ticker: 'AAPL', name: 'Apple Inc.', pct: 7.2, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'MSFT', name: 'Microsoft Corp.', pct: 6.5, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'NVDA', name: 'NVIDIA Corp.', pct: 5.3, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AMZN', name: 'Amazon.com Inc.', pct: 4.0, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'GOOGL', name: 'Alphabet Inc. A', pct: 3.5, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'META', name: 'Meta Platforms', pct: 2.1, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'TSLA', name: 'Tesla Inc.', pct: 1.7, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AVGO', name: 'Broadcom Inc.', pct: 1.5, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'JPM', name: 'JPMorgan Chase', pct: 1.4, region: 'América del Norte', sector: 'Finanzas', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'LLY', name: 'Eli Lilly', pct: 1.3, region: 'América del Norte', sector: 'Salud', country: 'EE.UU.', currency: 'USD' },
+  ],
+  'XDWD': [
+    { ticker: 'AAPL', name: 'Apple Inc.', pct: 4.8, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'MSFT', name: 'Microsoft Corp.', pct: 4.1, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'NVDA', name: 'NVIDIA Corp.', pct: 3.4, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AMZN', name: 'Amazon.com Inc.', pct: 2.6, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'GOOGL', name: 'Alphabet Inc. A', pct: 2.2, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'META', name: 'Meta Platforms', pct: 1.4, region: 'América del Norte', sector: 'Comunicaciones', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'NESN', name: 'Nestlé', pct: 0.9, region: 'Europa', sector: 'Consumo básico', country: 'Suiza', currency: 'CHF' },
+    { ticker: 'ASML', name: 'ASML Holding', pct: 0.8, region: 'Europa', sector: 'Tecnología', country: 'Países Bajos', currency: 'EUR' },
+    { ticker: 'NOVO-B', name: 'Novo Nordisk', pct: 0.7, region: 'Europa', sector: 'Salud', country: 'Dinamarca', currency: 'DKK' },
+    { ticker: '7203.T', name: 'Toyota Motor', pct: 0.6, region: 'Asia Pacífico', sector: 'Consumo discrecional', country: 'Japón', currency: 'JPY' },
+  ],
+  'ISAC': [
+    { ticker: 'AAPL', name: 'Apple Inc.', pct: 4.1, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'MSFT', name: 'Microsoft Corp.', pct: 3.7, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'NVDA', name: 'NVIDIA Corp.', pct: 3.0, region: 'América del Norte', sector: 'Tecnología', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'AMZN', name: 'Amazon.com Inc.', pct: 2.3, region: 'América del Norte', sector: 'Consumo discrecional', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'BABA', name: 'Alibaba Group', pct: 0.5, region: 'Asia Pacífico', sector: 'Consumo discrecional', country: 'China', currency: 'HKD' },
+    { ticker: 'TCEHY', name: 'Tencent Holdings', pct: 0.8, region: 'Asia Pacífico', sector: 'Comunicaciones', country: 'China', currency: 'HKD' },
+    { ticker: 'Samsung', name: 'Samsung Electronics', pct: 0.7, region: 'Asia Pacífico', sector: 'Tecnología', country: 'Corea del Sur', currency: 'KRW' },
+  ],
+  'EIMI': [
+    { ticker: 'TCEHY', name: 'Tencent Holdings', pct: 3.9, region: 'Asia Pacífico', sector: 'Comunicaciones', country: 'China', currency: 'HKD' },
+    { ticker: 'Samsung', name: 'Samsung Electronics', pct: 3.2, region: 'Asia Pacífico', sector: 'Tecnología', country: 'Corea del Sur', currency: 'KRW' },
+    { ticker: 'BABA', name: 'Alibaba Group', pct: 2.1, region: 'Asia Pacífico', sector: 'Consumo discrecional', country: 'China', currency: 'HKD' },
+    { ticker: 'BIDU', name: 'Baidu Inc.', pct: 0.8, region: 'Asia Pacífico', sector: 'Comunicaciones', country: 'China', currency: 'HKD' },
+    { ticker: 'VALE', name: 'Vale S.A.', pct: 0.6, region: 'América Latina', sector: 'Materiales', country: 'Brasil', currency: 'BRL' },
+  ],
+  'VHYG': [
+    { ticker: 'JNJ', name: 'Johnson & Johnson', pct: 2.8, region: 'América del Norte', sector: 'Salud', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'JPM', name: 'JPMorgan Chase', pct: 2.5, region: 'América del Norte', sector: 'Finanzas', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'XOM', name: 'ExxonMobil', pct: 2.3, region: 'América del Norte', sector: 'Energía', country: 'EE.UU.', currency: 'USD' },
+    { ticker: 'NESN', name: 'Nestlé', pct: 2.0, region: 'Europa', sector: 'Consumo básico', country: 'Suiza', currency: 'CHF' },
+    { ticker: 'NOVN', name: 'Novartis', pct: 1.8, region: 'Europa', sector: 'Salud', country: 'Suiza', currency: 'CHF' },
+  ],
+};
+
+// Known sector map for individual stocks
+const STOCK_SECTOR_MAP = {
+  AAPL: { sector: 'Tecnología', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  MSFT: { sector: 'Tecnología', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  NVDA: { sector: 'Tecnología', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  AMZN: { sector: 'Consumo discrecional', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  GOOGL: { sector: 'Comunicaciones', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  GOOG: { sector: 'Comunicaciones', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  META: { sector: 'Comunicaciones', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  TSLA: { sector: 'Consumo discrecional', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  AVGO: { sector: 'Tecnología', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  JPM: { sector: 'Finanzas', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  LLY: { sector: 'Salud', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  JNJ: { sector: 'Salud', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  XOM: { sector: 'Energía', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  INTC: { sector: 'Tecnología', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  AMD: { sector: 'Tecnología', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  KO: { sector: 'Consumo básico', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  MCD: { sector: 'Consumo discrecional', region: 'América del Norte', country: 'EE.UU.', currency: 'USD' },
+  'BTC-USD': { sector: 'Criptomonedas', region: 'Global', country: 'Global', currency: 'USD' },
+  'BTC-EUR': { sector: 'Criptomonedas', region: 'Global', country: 'Global', currency: 'EUR' },
+  'ETH-USD': { sector: 'Criptomonedas', region: 'Global', country: 'Global', currency: 'USD' },
+};
+
+function getEtfComposition(ticker) {
+  // Try exact match, then base ticker (EIMI.MI -> EIMI)
+  const base = ticker.split('.')[0].split('-')[0];
+  return ETF_COMPOSITIONS[ticker] || ETF_COMPOSITIONS[base] || null;
+}
+
+function getStockInfo(ticker) {
+  const base = ticker.split('.')[0];
+  return STOCK_SECTOR_MAP[ticker] || STOCK_SECTOR_MAP[base] || null;
+}
+
+// Build DeepDive data: expand ETFs into their holdings, sum with direct stocks
+function buildDeepDive(positions, totalCurrentValue) {
+  const holdings = {}; // ticker -> { name, value, region, sector, country, currency }
+  
+  positions.forEach(pos => {
+    const posValue = pos.current_value_eur || pos.invested_amount_eur || 0;
+    const isEtf = ['etf', 'index_fund'].includes(pos.investment_type);
+    const composition = isEtf ? getEtfComposition(pos.ticker) : null;
+    
+    if (composition && composition.length > 0) {
+      // Expand ETF into holdings
+      composition.forEach(holding => {
+        const holdingValue = posValue * (holding.pct / 100);
+        if (!holdings[holding.ticker]) {
+          holdings[holding.ticker] = { name: holding.name, value: 0, region: holding.region, sector: holding.sector, country: holding.country, currency: holding.currency };
+        }
+        holdings[holding.ticker].value += holdingValue;
+      });
+      // Remainder goes to "Otros (ETF)"
+      const coveredPct = composition.reduce((s, h) => s + h.pct, 0);
+      if (coveredPct < 100) {
+        const otherKey = `OTHER_${pos.ticker}`;
+        holdings[otherKey] = { name: `Otros (${pos.ticker})`, value: posValue * ((100 - coveredPct) / 100), region: pos.region || 'Global', sector: 'Diversificado', country: 'Global', currency: 'EUR' };
+      }
+    } else {
+      // Direct stock/crypto
+      const info = getStockInfo(pos.ticker);
+      if (!holdings[pos.ticker]) {
+        holdings[pos.ticker] = { name: pos.name, value: 0, region: pos.region || info?.region || 'Global', sector: pos.sector || info?.sector || 'Otro', country: info?.country || 'Global', currency: pos.currency || info?.currency || 'EUR' };
+      }
+      holdings[pos.ticker].value += posValue;
+    }
+  });
+  
+  return Object.entries(holdings).map(([ticker, data], i) => ({
+    ticker, ...data,
+    pct: totalCurrentValue > 0 ? (data.value / totalCurrentValue) * 100 : 0,
+    color: PAL[i % PAL.length],
+  })).sort((a, b) => b.value - a.value);
+}
+
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const TYPES = [
   { id: 'stock', label: 'Acción', color: '#3b82f6' },
@@ -579,7 +733,7 @@ function DividendsPanel({ positions }) {
 }
 
 // ─── Distribution Panel ────────────────────────────────────────────────────────
-const DIST_VIEWS = ['Tipo', 'Posiciones', 'DeepDive', 'Regiones', 'Sectores', 'Industrias', 'Activos', 'Países', 'Divisas'];
+const DIST_VIEWS = ['Tipo', 'Posiciones', 'DeepDive', 'Regiones', 'Sectores', 'Activos', 'Países', 'Divisas'];
 
 function DistributionPanel({ positions, totalCurrentValue }) {
   const [view, setView] = useState('Tipo');
@@ -614,8 +768,27 @@ function DistributionPanel({ positions, totalCurrentValue }) {
     if (view === 'Tipo') return groups.tipo;
     if (view === 'Posiciones') return groups.posiciones;
     if (view === 'Regiones') return groups.regiones;
-    if (view === 'Sectores' || view === 'Industrias') return groups.sectores;
-    if (view === 'DeepDive' || view === 'Activos') return groups.posiciones;
+    if (view === 'Sectores') return groups.sectores;
+    if (view === 'DeepDive') return buildDeepDive(positions, totalVal);
+    if (view === 'Activos') return groups.posiciones;
+    if (view === 'Países') {
+      const countryG = {};
+      buildDeepDive(positions, totalVal).forEach((h, i) => {
+        const c = h.country || 'Global';
+        if (!countryG[c]) countryG[c] = { name: c, value: 0, color: PAL[i % PAL.length] };
+        countryG[c].value += h.value;
+      });
+      return Object.values(countryG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a,b) => b.value - a.value);
+    }
+    if (view === 'Divisas') {
+      const currG = {};
+      buildDeepDive(positions, totalVal).forEach((h, i) => {
+        const c = h.currency || 'EUR';
+        if (!currG[c]) currG[c] = { name: c, value: 0, color: PAL[i % PAL.length] };
+        currG[c].value += h.value;
+      });
+      return Object.values(currG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a,b) => b.value - a.value);
+    }
     return groups.tipo;
   };
   const data = getViewData();
@@ -818,6 +991,10 @@ export default function FinanceInvestTab() {
   const [mainTab, setMainTab] = useState('portfolio');
   const [portfolioRange, setPortfolioRange] = useState('YTD');
   const [portfolioChart, setPortfolioChart] = useState('line');
+  const [portfolioMode, setPortfolioMode] = useState('valor'); // valor | rendimiento
+  const [portfolioHistory, setPortfolioHistory] = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [showCapital, setShowCapital] = useState(true);
 
   // Dialogs
   const [showForm, setShowForm] = useState(false);
@@ -841,7 +1018,7 @@ export default function FinanceInvestTab() {
   const [selectedResult, setSelectedResult] = useState(null);
   const [expandedPos, setExpandedPos] = useState(null);
 
-  const emptyForm = () => ({ ticker: '', name: '', investment_type: 'stock', invested_amount_eur: '', buy_price: '', currency: 'EUR', description: '', date: format(new Date(), 'yyyy-MM-dd'), sector: '', region: '', _fxRate: null });
+  const emptyForm = () => ({ ticker: '', name: '', investment_type: 'stock', invested_amount_eur: '', buy_price: '', currency: 'EUR', description: '', date: format(new Date(), 'yyyy-MM-dd'), sector: '', region: '', _fxRate: null, is_own_money: true });
   const [form, setForm] = useState(emptyForm());
 
   const fetchData = useCallback(async () => {
@@ -852,6 +1029,45 @@ export default function FinanceInvestTab() {
     setPositions(pos); setDailyTxs(txs); setLoading(false);
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Build portfolio value history from purchase_history of all positions
+  useEffect(() => {
+    if (positions.length === 0) { setPortfolioHistory([]); return; }
+    // Generate monthly data points based on when positions were bought
+    const now = new Date();
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(d);
+    }
+    // For each month, sum up invested amount of positions bought on/before that month
+    const history = months.map(monthDate => {
+      let investedAtMonth = 0;
+      positions.forEach(pos => {
+        const posDate = pos.date ? new Date(pos.date) : null;
+        if (posDate && posDate <= monthDate) {
+          investedAtMonth += pos.invested_amount_eur || 0;
+        }
+      });
+      // Approximate current value at that point (linear interpolation)
+      const totalInv = positions.reduce((s, p) => s + (p.invested_amount_eur || 0), 0);
+      const totalCur = positions.reduce((s, p) => s + (p.current_value_eur || p.invested_amount_eur || 0), 0);
+      const ratio = totalInv > 0 ? totalCur / totalInv : 1;
+      // Earlier months have less gain (approximate)
+      const monthsAgo = Math.round((now - monthDate) / (1000 * 60 * 60 * 24 * 30));
+      const monthRatio = 1 + (ratio - 1) * (1 - monthsAgo / 12);
+      const valueAtMonth = investedAtMonth * Math.max(monthRatio, 0.8);
+      const rendAtMonth = investedAtMonth > 0 ? ((valueAtMonth - investedAtMonth) / investedAtMonth) * 100 : 0;
+      return {
+        date: format(monthDate, 'dd MMM', { locale: es }),
+        fullDate: format(monthDate, "dd. MMM yyyy"),
+        valor: +valueAtMonth.toFixed(2),
+        capital: +investedAtMonth.toFixed(2),
+        rendimiento: +rendAtMonth.toFixed(2),
+      };
+    });
+    setPortfolioHistory(history);
+  }, [positions]);
 
   const dailyIncome = dailyTxs.filter(t => ['income', 'transfer_from_savings', 'transfer_from_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);
   const dailyOut = dailyTxs.filter(t => ['expense', 'other', 'transfer_to_savings', 'transfer_to_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);
@@ -868,7 +1084,12 @@ export default function FinanceInvestTab() {
     setSelectedResult(result);
     const typeMap = { 'EQUITY': 'stock', 'ETF': 'etf', 'MUTUALFUND': 'index_fund', 'CRYPTOCURRENCY': 'crypto', 'BOND': 'bond', 'COMMODITY': 'commodity', 'FUTURE': 'commodity', 'INDEX': 'etf' };
     const regionMap = { 'NMS': 'América del Norte', 'NYQ': 'América del Norte', 'NGM': 'América del Norte', 'PCX': 'América del Norte', 'BIT': 'Europa', 'FRA': 'Europa', 'EPA': 'Europa', 'AMS': 'Europa', 'LSE': 'Europa', 'BME': 'Europa', 'TYO': 'Asia Pacífico', 'HKG': 'Asia Pacífico', 'CCY': 'Global', 'CCC': 'Global' };
-    setForm(f => ({ ...f, ticker: result.ticker, name: result.name, investment_type: typeMap[result.type?.toUpperCase()] || 'stock', region: regionMap[result.exchange] || '' }));
+    const stockInfo = getStockInfo(result.ticker);
+    const etfComp = getEtfComposition(result.ticker);
+    // Auto-detect sector from known data
+    const autoSector = stockInfo?.sector || '';
+    const autoRegion = regionMap[result.exchange] || stockInfo?.region || '';
+    setForm(f => ({ ...f, ticker: result.ticker, name: result.name, investment_type: typeMap[result.type?.toUpperCase()] || 'stock', region: autoRegion, sector: autoSector }));
     const quote = await getYahooQuote(result.ticker);
     if (quote) { const fx = await getEurFxRate(quote.currency || 'USD'); setForm(f => ({ ...f, buy_price: quote.price?.toFixed(2) || '', currency: quote.currency || 'USD', _fxRate: fx })); }
     setSearchResults([]);
@@ -892,12 +1113,12 @@ export default function FinanceInvestTab() {
   const handleSave = async () => {
     const amount = parseFloat(form.invested_amount_eur);
     if (!amount || amount <= 0) return;
-    if (!editingPos && amount > dailyAvailable) { alert(`Saldo insuficiente. Disponible: ${dailyAvailable.toFixed(2)}€`); return; }
+    if (!editingPos && form.is_own_money !== false && amount > dailyAvailable) { alert(`Saldo insuficiente. Disponible: ${dailyAvailable.toFixed(2)}€`); return; }
     const buyPrice = parseFloat(form.buy_price) || 0;
     const fxRate = form.currency !== 'EUR' && buyPrice > 0 ? (amount / buyPrice) : 1;
-    const data = { ticker: form.ticker.toUpperCase(), name: form.name, investment_type: form.investment_type, invested_amount_eur: amount, buy_price: buyPrice, currency: form.currency, description: form.description, date: form.date, sector: form.sector, region: form.region, current_value_eur: amount, current_price: buyPrice, fx_rate: fxRate };
+    const data = { ticker: form.ticker.toUpperCase(), name: form.name, investment_type: form.investment_type, invested_amount_eur: amount, buy_price: buyPrice, currency: form.currency, description: form.description, date: form.date, sector: form.sector, region: form.region, current_value_eur: amount, current_price: buyPrice, fx_rate: fxRate, is_own_money: form.is_own_money !== false };
     const m = new Date(form.date).getMonth() + 1; const yr = new Date(form.date).getFullYear();
-    await base44.entities.FinanceTransaction.create({ type: 'transfer_to_investment', amount, description: `Inversión en ${form.ticker.toUpperCase()}`, date: form.date, month: m, year: yr });
+    if (form.is_own_money !== false) { await base44.entities.FinanceTransaction.create({ type: 'transfer_to_investment', amount, description: `Inversión en ${form.ticker.toUpperCase()}`, date: form.date, month: m, year: yr }); }
     if (editingPos) {
       const hist = [...(editingPos.purchase_history || []), { date: form.date, amount_eur: amount, buy_price: buyPrice, currency: form.currency }];
       await base44.entities.InvestmentPosition.update(editingPos.id, { ...data, invested_amount_eur: (editingPos.invested_amount_eur || 0) + amount, current_value_eur: (editingPos.current_value_eur || editingPos.invested_amount_eur || 0) + amount, purchase_history: hist });
@@ -996,42 +1217,87 @@ export default function FinanceInvestTab() {
           ))}
         </div>
 
-        {/* Chart area */}
-        {positions.length > 0 && (
+        {/* Mode selector: Rendimiento vs Valor */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+          <button onClick={() => setPortfolioMode('valor')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+            <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${portfolioMode === 'valor' ? GQ.green : GQ.textDim}`, background: portfolioMode === 'valor' ? GQ.green : 'transparent', transition: 'all 0.15s' }} />
+            <span style={{ fontSize: 12, color: portfolioMode === 'valor' ? GQ.text : GQ.textMuted, fontWeight: portfolioMode === 'valor' ? 600 : 400 }}>Valor de la cartera</span>
+          </button>
+          <button onClick={() => setPortfolioMode('rendimiento')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+            <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${portfolioMode === 'rendimiento' ? GQ.green : GQ.textDim}`, background: portfolioMode === 'rendimiento' ? GQ.green : 'transparent', transition: 'all 0.15s' }} />
+            <span style={{ fontSize: 12, color: portfolioMode === 'rendimiento' ? GQ.text : GQ.textMuted, fontWeight: portfolioMode === 'rendimiento' ? 600 : 400 }}>Rendimiento</span>
+          </button>
+        </div>
+
+        {/* getquin-style main chart */}
+        {positions.length > 0 && portfolioHistory.length > 0 && (
           <div style={{ position: 'relative' }}>
-            {portfolioChart === 'heatmap' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(positions.length, 4)}, 1fr)`, gap: 6 }}>
-                {positions.map((p, i) => (
-                  <HeatCell key={p.id} ticker={p.ticker} name={p.name}
-                    pct={((p.current_value_eur || p.invested_amount_eur || 0) / (totalCurrentValue || 1)) * 100}
-                    gainPct={getGainPct(p)} />
-                ))}
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={160}>
-                {portfolioChart === 'bar' ? (
-                  <BarChart data={positions.map((p, i) => ({ name: p.ticker, valor: +(p.current_value_eur || p.invested_amount_eur || 0).toFixed(2) }))} margin={{ top: 0, right: 0, left: -28, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={GQ.border} vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: GQ.textMuted }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: GQ.textMuted }} axisLine={false} tickLine={false} tickFormatter={v => `${v.toFixed(0)}€`} />
-                    <Tooltip contentStyle={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 8, fontSize: 11, color: GQ.text }} />
-                    <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
-                      {positions.map((_, i) => <Cell key={i} fill={PAL[i % PAL.length]} />)}
-                    </Bar>
-                  </BarChart>
-                ) : (
-                  <AreaChart data={positions.map((p, i) => ({ name: p.ticker, valor: +(p.current_value_eur || p.invested_amount_eur || 0).toFixed(2) }))} margin={{ top: 4, right: 0, left: -28, bottom: 0 }}>
-                    <defs><linearGradient id="gqGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={GQ.green} stopOpacity={0.2} /><stop offset="95%" stopColor={GQ.green} stopOpacity={0} /></linearGradient></defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={GQ.border} vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: GQ.textMuted }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: GQ.textMuted }} axisLine={false} tickLine={false} tickFormatter={v => `${v.toFixed(0)}€`} />
-                    <Tooltip contentStyle={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 8, fontSize: 11, color: GQ.text }} />
-                    <Area type="monotone" dataKey="valor" stroke={GQ.green} fill="url(#gqGrad)" strokeWidth={2} dot={false} />
-                  </AreaChart>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={portfolioHistory} margin={{ top: 8, right: 0, left: -28, bottom: 0 }}
+                onMouseMove={e => {}}
+              >
+                <defs>
+                  <linearGradient id="gqMainGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={GQ.green} stopOpacity={0.2} />
+                    <stop offset="95%" stopColor={GQ.green} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="2 4" stroke={GQ.border} vertical={false} horizontal={true} />
+                <XAxis dataKey="date" tick={{ fontSize: 9, fill: GQ.textMuted }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis
+                  tick={{ fontSize: 9, fill: GQ.textMuted }} axisLine={false} tickLine={false} width={40}
+                  tickFormatter={v => portfolioMode === 'rendimiento' ? `${v.toFixed(1)}%` : `${v.toFixed(0)}€`}
+                  domain={['auto', 'auto']}
+                />
+                <Tooltip
+                  cursor={{ stroke: GQ.textMuted, strokeWidth: 1, strokeDasharray: '0' }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0]?.payload;
+                    return (
+                      <div style={{ background: '#1a1f2e', border: `1px solid ${GQ.border}`, borderRadius: 8, padding: '10px 14px', fontSize: 12, minWidth: 180 }}>
+                        <div style={{ color: GQ.textMuted, marginBottom: 8, fontSize: 11 }}>{d?.fullDate}</div>
+                        {portfolioMode === 'valor' ? (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.green }} />
+                              <span style={{ color: GQ.textMuted, fontSize: 11 }}>Valor de la cartera de inversiones</span>
+                              <span style={{ color: GQ.text, fontWeight: 700, marginLeft: 'auto' }}>{(d?.valor || 0).toFixed(2)} €</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.textMuted, border: '2px dashed ' + GQ.textMuted }} />
+                              <span style={{ color: GQ.textMuted, fontSize: 11 }}>Capital invertido</span>
+                              <span style={{ color: GQ.textMuted, fontWeight: 600, marginLeft: 'auto' }}>{(d?.capital || 0).toFixed(2)} €</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.green }} />
+                            <span style={{ color: GQ.textMuted, fontSize: 11 }}>Rendimiento</span>
+                            <span style={{ color: (d?.rendimiento || 0) >= 0 ? GQ.green : GQ.red, fontWeight: 700, marginLeft: 'auto' }}>{(d?.rendimiento || 0) >= 0 ? '+' : ''}{(d?.rendimiento || 0).toFixed(2)}%</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+                {/* Capital line (dashed gray) - only in valor mode */}
+                {portfolioMode === 'valor' && (
+                  <Line type="monotone" dataKey="capital" stroke={GQ.textMuted} strokeWidth={1} strokeDasharray="4 3" dot={false} />
                 )}
-              </ResponsiveContainer>
-            )}
-            <div style={{ textAlign: 'right', fontSize: 10, color: GQ.textDim, marginTop: 4 }}>GRÁFICO POR getquin</div>
+                {/* Main value/rendimiento line */}
+                <Area
+                  type="monotone"
+                  dataKey={portfolioMode === 'rendimiento' ? 'rendimiento' : 'valor'}
+                  stroke={GQ.green}
+                  fill="url(#gqMainGrad)"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 5, fill: GQ.green, stroke: GQ.card, strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+            <div style={{ textAlign: 'right', fontSize: 9, color: GQ.textDim, marginTop: 2 }}>GRÁFICO POR getquin</div>
           </div>
         )}
       </div>
@@ -1333,6 +1599,21 @@ export default function FinanceInvestTab() {
                 </Select>
               </div>
               <div><label className="text-xs text-muted-foreground mb-1 block">Fecha</label><Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="bg-background/50 border-border text-sm" /></div>
+            </div>
+            {/* Is own money toggle */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-2 block">Tipo de compra</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setForm(f => ({ ...f, is_own_money: true }))}
+                  style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: `1px solid`, borderColor: form.is_own_money !== false ? '#22c55e' : '#1f2937', background: form.is_own_money !== false ? '#14532d' : 'transparent', color: form.is_own_money !== false ? '#4ade80' : '#6b7280', fontSize: 12, cursor: 'pointer', fontWeight: form.is_own_money !== false ? 600 : 400, transition: 'all 0.15s' }}>
+                  💰 Dinero propio
+                </button>
+                <button onClick={() => setForm(f => ({ ...f, is_own_money: false }))}
+                  style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: `1px solid`, borderColor: form.is_own_money === false ? '#3b82f6' : '#1f2937', background: form.is_own_money === false ? '#1e3a5f' : 'transparent', color: form.is_own_money === false ? '#93c5fd' : '#6b7280', fontSize: 12, cursor: 'pointer', fontWeight: form.is_own_money === false ? 600 : 400, transition: 'all 0.15s' }}>
+                  🎁 No dinero propio
+                </button>
+              </div>
+              {form.is_own_money === false && <p style={{ fontSize: 11, color: '#6b7280', marginTop: 6, margin: '6px 0 0' }}>Esta compra no descontará del saldo disponible</p>}
             </div>
             <div><label className="text-xs text-muted-foreground mb-1 block">Descripción (opcional)</label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Notas..." className="bg-background/50 border-border text-sm" /></div>
             <div className="flex gap-2 pt-2">

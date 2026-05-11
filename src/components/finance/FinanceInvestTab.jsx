@@ -992,6 +992,35 @@ export default function FinanceInvestTab() {
     return () => document.removeEventListener('click', close);
   }, []);
 
+  // Build all transactions from purchase_history — DEBE ir antes de filteredTransactions
+  const allTransactions = useMemo(() => {
+    const txs = [];
+    positions.forEach(pos => {
+      const hist = pos.purchase_history?.length > 0
+        ? pos.purchase_history
+        : [{ date: pos.date, amount_eur: pos.invested_amount_eur, buy_price: pos.buy_price, currency: pos.currency }];
+      hist.forEach((h, i) => {
+        if (!h?.amount_eur) return;
+        txs.push({ id: `${pos.id}_buy_${i}`, type: 'buy', ticker: pos.ticker, name: pos.name, date: h.date, amount: h.amount_eur, price: h.buy_price, currency: h.currency || pos.currency, posId: pos.id, investment_type: pos.investment_type });
+      });
+    });
+    sales.forEach(s => {
+      txs.push({ id: s.id, type: 'sell', ticker: s.ticker, name: s.name, date: s.date, amount: s.amount_eur, price: s.sell_price, gain: s.gain_eur, gainPct: s.gain_pct, saleId: s.id });
+    });
+    txs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return txs;
+  }, [positions, sales]);
+
+  const groupedTransactions = useMemo(() => {
+    const groups = {};
+    allTransactions.forEach(tx => {
+      const key = tx.date ? tx.date.slice(0, 7) : 'unknown';
+      if (!groups[key]) groups[key] = { key, label: tx.date ? format(new Date(tx.date + 'T12:00:00'), 'MMMM yyyy', { locale: es }) : 'Sin fecha', txs: [] };
+      groups[key].txs.push(tx);
+    });
+    return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
+  }, [allTransactions]);
+
   const [txSearch, setTxSearch] = useState('');
   const [txFilter, setTxFilter] = useState('all');
 
@@ -1086,35 +1115,6 @@ export default function FinanceInvestTab() {
     setShowAccountForm(false); setAccountForm({ name: '', broker: '' });
     fetchData();
   };
-
-  // Build all transactions from purchase_history for display
-  const allTransactions = useMemo(() => {
-    const txs = [];
-    positions.forEach(pos => {
-      const hist = pos.purchase_history?.length > 0
-        ? pos.purchase_history
-        : [{ date: pos.date, amount_eur: pos.invested_amount_eur, buy_price: pos.buy_price, currency: pos.currency }];
-      hist.forEach((h, i) => {
-        if (!h?.amount_eur) return;
-        txs.push({ id: `${pos.id}_buy_${i}`, type: 'buy', ticker: pos.ticker, name: pos.name, date: h.date, amount: h.amount_eur, price: h.buy_price, currency: h.currency || pos.currency, posId: pos.id, investment_type: pos.investment_type });
-      });
-    });
-    sales.forEach(s => {
-      txs.push({ id: s.id, type: 'sell', ticker: s.ticker, name: s.name, date: s.date, amount: s.amount_eur, price: s.sell_price, gain: s.gain_eur, gainPct: s.gain_pct, saleId: s.id });
-    });
-    txs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    return txs;
-  }, [positions, sales]);
-
-  const groupedTransactions = useMemo(() => {
-    const groups = {};
-    allTransactions.forEach(tx => {
-      const key = tx.date ? tx.date.slice(0, 7) : 'unknown';
-      if (!groups[key]) groups[key] = { key, label: tx.date ? format(new Date(tx.date + 'T12:00:00'), 'MMMM yyyy', { locale: es }) : 'Sin fecha', txs: [] };
-      groups[key].txs.push(tx);
-    });
-    return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
-  }, [allTransactions]);
 
   const dailyIncome = dailyTxs.filter(t => ['income', 'transfer_from_savings', 'transfer_from_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);
   const dailyOut = dailyTxs.filter(t => ['expense', 'other', 'transfer_to_savings', 'transfer_to_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);

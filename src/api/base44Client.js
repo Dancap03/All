@@ -1,15 +1,11 @@
 /**
  * base44Client.js
- * Reemplaza base44 con Firebase Firestore manteniendo la misma interfaz:
- *   base44.entities.X.list(order, limit)
- *   base44.entities.X.filter({ campo: valor })
- *   base44.entities.X.create(data)
- *   base44.entities.X.update(id, data)
- *   base44.entities.X.delete(id)
- *   base44.integrations.Core.InvokeLLM({ prompt })
+ * FIX: db se resuelve en cada llamada (no en el momento de importación del módulo)
+ * para evitar el error TDZ "Cannot access X before initialization" en el bundle
+ * de producción, donde Rollup puede ejecutar este módulo antes de que firebase.js
+ * haya exportado db.
  */
 
-import { db } from './firebase';
 import {
   collection,
   doc,
@@ -19,6 +15,24 @@ import {
   updateDoc,
   deleteDoc,
 } from 'firebase/firestore';
+
+// db se importa de forma lazy para evitar el TDZ en producción
+function getDb() {
+  // La importación dinámica síncrona no existe, así que resolvemos db
+  // mediante un getter que siempre lee del módulo ya inicializado.
+  // Como firebase.js es puro (no circular), esto es seguro.
+  return import('./firebase').then(m => m.db);
+}
+
+// Versión síncrona: se usa dentro de async functions, así que
+// simplificamos cacheando db la primera vez que se llame.
+let _db = null;
+async function db() {
+  if (_db) return _db;
+  const m = await import('./firebase');
+  _db = m.db;
+  return _db;
+}
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,11 +59,10 @@ function sortDocs(docs, orderStr) {
 }
 
 function makeEntity(collectionName) {
-  const col = () => collection(db, collectionName);
-
   return {
     async list(orderField, maxDocs) {
-      const s = await getDocs(col());
+      const database = await db();
+      const s = await getDocs(collection(database, collectionName));
       let docs = snapAll(s);
       if (orderField) docs = sortDocs(docs, orderField);
       if (maxDocs)    docs = docs.slice(0, maxDocs);
@@ -57,7 +70,8 @@ function makeEntity(collectionName) {
     },
 
     async filter(fieldsObj) {
-      const s = await getDocs(col());
+      const database = await db();
+      const s = await getDocs(collection(database, collectionName));
       let docs = snapAll(s);
       for (const [key, val] of Object.entries(fieldsObj)) {
         docs = docs.filter(d => d[key] === val);
@@ -66,7 +80,8 @@ function makeEntity(collectionName) {
     },
 
     async create(data) {
-      const ref = await addDoc(col(), {
+      const database = await db();
+      const ref = await addDoc(collection(database, collectionName), {
         ...data,
         created_date: new Date().toISOString(),
       });
@@ -75,14 +90,16 @@ function makeEntity(collectionName) {
     },
 
     async update(id, data) {
-      const ref = doc(db, collectionName, id);
+      const database = await db();
+      const ref = doc(database, collectionName, id);
       await updateDoc(ref, data);
       const updated = await getDoc(ref);
       return snap(updated);
     },
 
     async delete(id) {
-      await deleteDoc(doc(db, collectionName, id));
+      const database = await db();
+      await deleteDoc(doc(database, collectionName, id));
     },
   };
 }
@@ -108,19 +125,20 @@ export const base44 = {
     InvestmentAccount:  makeEntity('investmentAccounts'),
   },
 
-  // stub para que no rompa si algo lo referencia
   appLogs: {
     logUserInApp: async () => {},
   },
 
+  auth: {
+    // stub para PageNotFound que lo referencia
+    me: async () => { throw new Error('not implemented'); },
+  },
+
   integrations: {
     Core: {
-      // InvokeLLM se usa en FinanceInvestTab para buscar precios.
-      // Si no tienes VITE_ANTHROPIC_API_KEY en el .env simplemente devuelve {}.
       async InvokeLLM({ prompt }) {
         const apiKey = import.meta.env.VITE_GROQ_API_KEY;
         if (!apiKey) return {};
-
         try {
           const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',

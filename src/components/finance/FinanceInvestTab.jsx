@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge'; 
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -11,7 +11,7 @@ import { Plus, RefreshCw, TrendingUp, TrendingDown, Search, X, ChevronRight, Che
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// ─── Groq ───────────────────────────────────────────────────────────────────── 
+// ─── Groq ─────────────────────────────────────────────────────────────────────
 async function callGroq(messages, maxTokens = 1500) {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY;
   if (!apiKey) throw new Error('VITE_GROQ_API_KEY no configurada');
@@ -353,496 +353,194 @@ function HeatCell({ name, ticker, pct, gainPct }) {
 
 // ─── AI Panel ─────────────────────────────────────────────────────────────────
 function AIPanel({ positions, totalInvested, totalCurrentValue, totalGain, totalGainPct }) {
-  const [profile, setProfile] = useState(() => { try { return JSON.parse(localStorage.getItem('gq_profile_v2') || 'null'); } catch { return null; } });
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [numInput, setNumInput] = useState('');
-  const [msgs, setMsgs] = useState([]);
-  const [input, setInput] = useState('');
+  const [step, setStep] = useState('profile'); // profile | result
   const [loading, setLoading] = useState(false);
-  const [analysis, setAnalysis] = useState(() => { try { return JSON.parse(localStorage.getItem('gq_analysis_v2') || 'null'); } catch { return null; } });
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisUsed, setAnalysisUsed] = useState(() => parseInt(localStorage.getItem('gq_analysis_used') || '0'));
-  const endRef = useRef(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
+  const [profile, setProfile] = useState({ salary: '', expenses: '', goal: '', horizon: '', risk: 'Moderado', job_security: 'Estable', monthly_invest: '', broker: '' });
+  const [profileStep, setProfileStep] = useState(0);
+  const [result, setResult] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const analysisCount = JSON.parse(localStorage.getItem('gq_ia_count') || '0');
+  const MAX_ANALYSES = 8;
 
-  const sysPrompt = (prof) => {
-    const portStr = positions.length > 0
-      ? positions.map(p => `${p.ticker}(${p.name?.slice(0, 20)}, ${(p.current_value_eur || p.invested_amount_eur || 0).toFixed(0)}€, ${p.investment_type}${p.sector ? ',' + p.sector : ''}${p.region ? ',' + p.region : ''})`).join(' | ')
-      : 'Sin posiciones';
-    return `Eres un asesor financiero personal de élite. Español, directo, profesional. Usa datos reales.
-PERFIL: salario=${prof.salary}€/mes, gastos_fijos=${prof.expenses}€, disponible=${(parseFloat(prof.salary || 0) - parseFloat(prof.expenses || 0)).toFixed(0)}€, objetivo="${prof.goal}", horizonte="${prof.horizon}", riesgo="${prof.risk}", seguridad_laboral="${prof.job_security}", inversión_mensual=${prof.monthly_invest}€, broker="${prof.broker}"
-CARTERA: ${portStr} | Total=${totalCurrentValue.toFixed(0)}€ invertido=${totalInvested.toFixed(0)}€ ganancia=${totalGain >= 0 ? '+' : ''}${totalGain.toFixed(0)}€(${totalGainPct.toFixed(1)}%)
-Da cifras en euros. Usa **negrita** y listas. Sé honesto.`;
-  };
+  const PROFILE_QUESTIONS = [
+    { key: 'salary', label: '¿Cuál es tu salario neto mensual (€)?', placeholder: 'Ej: 1800', type: 'number' },
+    { key: 'expenses', label: '¿Cuáles son tus gastos fijos mensuales (€)?', placeholder: 'Ej: 900', type: 'number' },
+    { key: 'monthly_invest', label: '¿Cuánto puedes invertir cada mes (€)?', placeholder: 'Ej: 200', type: 'number' },
+    { key: 'horizon', label: '¿Cuál es tu horizonte de inversión?', placeholder: 'Ej: 10 años', type: 'text' },
+    { key: 'goal', label: '¿Cuál es tu objetivo principal?', placeholder: 'Ej: Jubilación anticipada, casa, libertad financiera...', type: 'text' },
+    { key: 'risk', label: '¿Cuál es tu tolerancia al riesgo?', placeholder: '', type: 'select', options: ['Conservador', 'Moderado', 'Agresivo', 'Muy agresivo'] },
+  ];
 
-  const answer = async (val) => {
-    const q = AI_QS[step];
-    const newAns = { ...answers, [q.id]: val };
-    setAnswers(newAns);
-    if (step < AI_QS.length - 1) { setStep(s => s + 1); setNumInput(''); }
-    else { localStorage.setItem('gq_profile_v2', JSON.stringify(newAns)); setProfile(newAns); await runAnalysis(newAns); }
-  };
-
-  const runAnalysis = async (prof) => {
-    setAnalyzing(true);
+  const runAnalysis = async () => {
+    if (analysisCount >= MAX_ANALYSES) return;
+    setLoading(true);
+    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+    const portStr = positions.map(p => {
+      const gain = (p.current_value_eur || p.invested_amount_eur || 0) - (p.invested_amount_eur || 0);
+      const gainPct = p.invested_amount_eur > 0 ? (gain / p.invested_amount_eur * 100).toFixed(2) : 0;
+      return `${p.ticker}(${p.name}): ${(p.current_value_eur||p.invested_amount_eur||0).toFixed(0)}€, G/P:${gainPct}%, tipo:${p.investment_type||p.asset_type}, sector:${p.sector||'N/D'}`;
+    }).join(' | ');
+    const profStr = `Salario:${profile.salary}€/mes, gastos:${profile.expenses}€, invertiría:${profile.monthly_invest}€/mes, horizonte:${profile.horizon}, objetivo:${profile.goal}, riesgo:${profile.risk}`;
     try {
-      const portStr = positions.map(p => `${p.ticker}: ${(p.current_value_eur || p.invested_amount_eur || 0).toFixed(0)}€ (${p.investment_type}${p.sector ? ',' + p.sector : ''}${p.region ? ',' + p.region : ''})`).join('\n') || 'Sin posiciones';
-      const text = await callGroq([
-        { role: 'system', content: sysPrompt(prof) },
-        { role: 'user', content: `Analiza esta cartera:\n${portStr}\n\nResponde SOLO con JSON válido:\n{"score":0-100,"summary":"2 frases","recommendations":[{"type":"warning|good|tip","text":"texto"}],"diversification":0-10,"risk_level":0-10,"cost_efficiency":0-10,"macroeconomic":0-10,"top_action":"acción más urgente en 1 frase"}` }
-      ], 600);
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile', max_tokens: 1500, temperature: 0.5,
+          messages: [{ role: 'user', content: `Analiza esta cartera de inversión y perfil financiero. Cartera: ${portStr}. Perfil: ${profStr}. Valor total: ${totalCurrentValue.toFixed(0)}€, invertido: ${totalInvested.toFixed(0)}€, G/P: ${totalGainPct.toFixed(2)}%.
+Responde SOLO con JSON válido sin bloques de código:
+{"score":NUMBER_0_100,"summary":"2 frases sobre la cartera","diversification":NUMBER_0_10,"risk_level":NUMBER_0_10,"cost_efficiency":NUMBER_0_10,"macroeconomic":NUMBER_0_10,"recommendations":[{"title":"título corto","detail":"explicación detallada en 2-3 frases"}],"top_action":"acción más urgente en 1 frase","above_pct":NUMBER_0_100}` }]
+        }),
+      });
+      const d = await res.json();
+      const text = d.choices?.[0]?.message?.content || '{}';
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-      const used = analysisUsed + 1;
-      localStorage.setItem('gq_analysis_v2', JSON.stringify(parsed));
-      localStorage.setItem('gq_analysis_used', String(used));
-      setAnalysis(parsed); setAnalysisUsed(used);
+      setResult(parsed);
+      setStep('result');
+      localStorage.setItem('gq_ia_count', JSON.stringify(analysisCount + 1));
     } catch (e) { console.error(e); }
-    setAnalyzing(false);
-  };
-
-  const send = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg = input.trim(); setInput('');
-    const newMsgs = [...msgs, { role: 'user', content: userMsg }];
-    setMsgs(newMsgs); setLoading(true);
-    try {
-      const reply = await callGroq([{ role: 'system', content: sysPrompt(profile) }, ...newMsgs.slice(-12)], 1200);
-      setMsgs(m => [...m, { role: 'assistant', content: reply }]);
-    } catch (e) { setMsgs(m => [...m, { role: 'assistant', content: `Error: ${e.message}` }]); }
     setLoading(false);
   };
 
-  const reset = () => { localStorage.removeItem('gq_profile_v2'); localStorage.removeItem('gq_analysis_v2'); localStorage.removeItem('gq_analysis_used'); setProfile(null); setAnalysis(null); setMsgs([]); setStep(0); setAnswers({}); setAnalysisUsed(0); };
+  const q = PROFILE_QUESTIONS[profileStep];
 
-  // Onboarding
-  if (!profile) {
-    const q = AI_QS[step];
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Bot style={{ width: 16, height: 16, color: GQ.blue }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: GQ.text }}>getquin IA</span>
-            </div>
-            <span style={{ fontSize: 11, color: GQ.textMuted }}>{step + 1}/{AI_QS.length} análisis utilizado</span>
+  if (step === 'profile') return (
+    <div style={{ padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: GQ.text }}>getquin IA</span>
+        <span style={{ fontSize: 12, color: GQ.textMuted }}>{analysisCount}/{MAX_ANALYSES} análisis utilizado</span>
+      </div>
+      <div style={{ width: '100%', height: 2, background: GQ.border, borderRadius: 2, marginBottom: 20 }}>
+        <div style={{ width: `${(analysisCount/MAX_ANALYSES)*100}%`, height: '100%', background: GQ.blue, borderRadius: 2 }} />
+      </div>
+      <div style={{ background: '#0a0e1a', border: `1px solid ${GQ.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <div style={{ fontSize: 14, color: GQ.text, marginBottom: 12, fontWeight: 500 }}>{q.label}</div>
+        {q.type === 'select' ? (
+          <select value={profile[q.key]} onChange={e => setProfile(p => ({...p, [q.key]: e.target.value}))}
+            style={{ width: '100%', background: '#0d1224', border: `1px solid ${GQ.border}`, borderRadius: 8, color: GQ.text, fontSize: 13, padding: '10px 12px', outline: 'none' }}>
+            {q.options.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type={q.type} value={profile[q.key]} onChange={e => setProfile(p => ({...p, [q.key]: e.target.value}))}
+              placeholder={q.placeholder} autoFocus
+              onKeyDown={e => e.key === 'Enter' && profileStep < PROFILE_QUESTIONS.length - 1 && setProfileStep(s => s+1)}
+              style={{ flex: 1, background: '#0d1224', border: `1px solid ${GQ.border}`, borderRadius: 8, color: GQ.text, fontSize: 13, padding: '10px 12px', outline: 'none' }} />
+            <button onClick={() => profileStep < PROFILE_QUESTIONS.length - 1 ? setProfileStep(s => s+1) : runAnalysis()}
+              disabled={loading} style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: GQ.blue, color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 18 }}>→</button>
           </div>
-          <div style={{ height: 3, background: GQ.border, borderRadius: 2, marginBottom: 20 }}>
-            <div style={{ height: '100%', background: GQ.blue, width: `${((step + 1) / AI_QS.length) * 100}%`, borderRadius: 2, transition: 'width 0.3s' }} />
+        )}
+        {q.type === 'select' && (
+          <button onClick={() => profileStep < PROFILE_QUESTIONS.length - 1 ? setProfileStep(s => s+1) : runAnalysis()}
+            disabled={loading} style={{ marginTop: 10, width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: GQ.blue, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {loading ? 'Analizando...' : profileStep < PROFILE_QUESTIONS.length - 1 ? 'Siguiente →' : '🔍 Analizar cartera'}
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {PROFILE_QUESTIONS.map((_, i) => (
+          <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= profileStep ? GQ.blue : GQ.border }} />
+        ))}
+      </div>
+      {profileStep > 0 && <button onClick={() => setProfileStep(s => s-1)} style={{ marginTop: 10, background: 'none', border: 'none', color: GQ.textMuted, fontSize: 12, cursor: 'pointer' }}>← Atrás</button>}
+    </div>
+  );
+
+  if (!result) return null;
+
+  const scoreColor = result.score >= 70 ? GQ.green : result.score >= 45 ? '#f59e0b' : GQ.red;
+  const gauges = [
+    { label: 'Diversificación', val: result.diversification, sub: result.diversification < 5 ? 'Posibilidades de mejora' : 'Bien diversificado' },
+    { label: 'Riesgo', val: result.risk_level, sub: result.risk_level < 4 ? 'Bajo' : result.risk_level < 7 ? 'Medio' : 'Alto' },
+    { label: 'Tasas', val: result.cost_efficiency, sub: result.cost_efficiency < 4 ? 'Alto coste' : result.cost_efficiency < 7 ? 'Medio' : 'Eficiente' },
+    { label: 'Macroeconomía', val: result.macroeconomic, sub: result.macroeconomic < 4 ? 'Bajo' : result.macroeconomic < 7 ? 'Medio' : 'Alto' },
+  ];
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20, marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: GQ.text }}>getquin IA</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: GQ.textMuted }}>{analysisCount}/{MAX_ANALYSES} Análisis utilizado</span>
+            <button onClick={() => { setStep('profile'); setProfileStep(0); setResult(null); }}
+              style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.text, fontSize: 11, cursor: 'pointer' }}>↻ Nueva</button>
           </div>
-          <div style={{ background: '#0a0a0f', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
-            <p style={{ fontSize: 14, color: GQ.text, fontWeight: 500, margin: 0 }}>{q.q}</p>
+        </div>
+
+        {/* Score gauge */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+          <svg width="160" height="90" viewBox="0 0 160 90">
+            <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke={GQ.border} strokeWidth="12" strokeLinecap="round" />
+            <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke={scoreColor} strokeWidth="12" strokeLinecap="round"
+              strokeDasharray={`${(result.score/100)*220} 220`} style={{ transition: 'stroke-dasharray 1.2s ease' }} />
+            <text x="80" y="68" textAnchor="middle" fill={scoreColor} fontSize="28" fontWeight="800">{result.score}</text>
+            <text x="80" y="82" textAnchor="middle" fill={GQ.textMuted} fontSize="10">/100</text>
+          </svg>
+          <div style={{ fontSize: 12, color: GQ.textMuted, marginTop: 4, textAlign: 'center' }}>
+            Puntuación de la cartera<br/>
+            <span style={{ color: GQ.text }}>Tu cartera se sitúa por encima del <span style={{ color: scoreColor, fontWeight: 700 }}>{result.above_pct || 0} %</span> de usuarios</span>
           </div>
-          {q.type === 'select' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {q.opts.map(o => (
-                <button key={o} onClick={() => answer(o)}
-                  style={{ textAlign: 'left', padding: '11px 14px', borderRadius: 10, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.text, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = GQ.blueDim; e.currentTarget.style.borderColor = GQ.blue; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = GQ.border; }}>
-                  {o}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input type="number" placeholder={q.ph} value={numInput} onChange={e => setNumInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && numInput && answer(numInput)}
-                style={{ flex: 1, background: '#0a0a0f', border: `1px solid ${GQ.border}`, borderRadius: 10, padding: '10px 14px', color: GQ.text, fontSize: 13, outline: 'none' }} />
-              <button onClick={() => numInput && answer(numInput)}
-                style={{ padding: '10px 18px', borderRadius: 10, background: GQ.blue, border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
-                →
-              </button>
+          <div style={{ marginTop: 10, padding: '10px 16px', background: '#0a0e1a', borderRadius: 10, fontSize: 12, color: GQ.textMuted, maxWidth: 400, textAlign: 'center' }}>
+            {result.summary}
+          </div>
+          {result.top_action && (
+            <div style={{ marginTop: 8, padding: '8px 14px', background: `${GQ.amber}15`, border: `1px solid ${GQ.amber}30`, borderRadius: 10, fontSize: 12, color: GQ.amber, maxWidth: 400, textAlign: 'center' }}>
+              💡 {result.top_action}
             </div>
           )}
-          {step > 0 && <button onClick={() => { setStep(s => s - 1); setNumInput(''); }} style={{ marginTop: 12, fontSize: 12, color: GQ.textMuted, background: 'none', border: 'none', cursor: 'pointer' }}>← Anterior</button>}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* getquin IA score card */}
-      <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Bot style={{ width: 16, height: 16, color: GQ.blue }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: GQ.text }}>getquin IA</span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: GQ.textMuted }}>{analysisUsed}/5 Análisis utilizado</span>
-            <button onClick={() => profile && runAnalysis(profile)} disabled={analyzing}
-              style={{ fontSize: 11, color: GQ.blue, background: 'transparent', border: `1px solid ${GQ.border}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer' }}>
-              {analyzing ? '...' : '↻ Actualización'}
-            </button>
-          </div>
         </div>
 
-        {analyzing ? (
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <Loader2 style={{ width: 28, height: 28, color: GQ.blue, margin: '0 auto 8px', animation: 'spin 1s linear infinite' }} />
-            <p style={{ color: GQ.textMuted, fontSize: 13, margin: 0 }}>Analizando tu cartera...</p>
-          </div>
-        ) : analysis ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
-              <ScoreGauge score={analysis.score} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: GQ.textMuted, marginBottom: 4 }}>Puntuación de la cartera</div>
-                <div style={{ fontSize: 12, color: GQ.text, lineHeight: 1.6, marginBottom: 8 }}>{analysis.summary}</div>
-                <div style={{ fontSize: 11, color: GQ.textMuted }}>Su cartera se sitúa por encima del <span style={{ color: GQ.text, fontWeight: 600 }}>{Math.round(analysis.score * 0.7)}%</span> de usuarios de getquin</div>
-                {analysis.top_action && <div style={{ marginTop: 10, background: GQ.blueDim, border: `1px solid ${GQ.blue}22`, borderRadius: 8, padding: '7px 12px', fontSize: 12, color: '#93c5fd' }}>⚡ {analysis.top_action}</div>}
-              </div>
-            </div>
-
-            {/* Recomendaciones */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, color: GQ.textMuted, marginBottom: 8, fontWeight: 600 }}>Recomendaciones</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {analysis.recommendations?.slice(0, 5).map((rec, i) => (
-                  <button key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#0a0a0f', borderRadius: 10, border: `1px solid ${GQ.border}`, cursor: 'pointer', textAlign: 'left' }}>
-                    <span style={{ fontSize: 12, color: GQ.text }}>{rec.type === 'warning' ? '⚠️' : rec.type === 'good' ? '✅' : '💡'} {rec.text}</span>
-                    <ChevronDown style={{ width: 14, height: 14, color: GQ.textMuted, flexShrink: 0 }} />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Análisis sub-scores */}
-            <div>
-              <div style={{ fontSize: 12, color: GQ.textMuted, marginBottom: 8, fontWeight: 600 }}>Análisis</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {[
-                  { label: 'Diversificación', value: analysis.diversification, color: GQ.blue, badge: analysis.diversification >= 7 ? 'Alta' : analysis.diversification >= 4 ? 'Posibilidades de m...' : 'Baja' },
-                  { label: 'Riesgo', value: analysis.risk_level, color: GQ.amber, badge: analysis.risk_level >= 7 ? 'Alto' : analysis.risk_level >= 4 ? 'Medio' : 'Bajo' },
-                  { label: 'Tasas', value: analysis.cost_efficiency, color: GQ.green, badge: analysis.cost_efficiency >= 7 ? 'Bajo' : 'Medio' },
-                  { label: 'Macroeconomía', value: analysis.macroeconomic, color: '#8b5cf6', badge: analysis.macroeconomic >= 7 ? 'Alto' : 'Medio' },
-                ].map(item => (
-                  <div key={item.label} style={{ background: '#0a0a0f', borderRadius: 12, padding: '14px 16px', cursor: 'pointer', position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginBottom: 4 }}>
-                      <span style={{ fontSize: 24, fontWeight: 800, color: item.color }}>{item.value}</span>
-                      <span style={{ fontSize: 11, color: GQ.textMuted }}>/10</span>
-                    </div>
-                    <div style={{ background: `${item.color}22`, borderRadius: 4, padding: '2px 7px', display: 'inline-block', marginBottom: 6 }}>
-                      <span style={{ fontSize: 10, color: item.color, fontWeight: 600 }}>{item.badge}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: GQ.text, fontWeight: 500 }}>{item.label} <ChevronRight style={{ width: 12, height: 12, display: 'inline', verticalAlign: 'middle' }} /></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <button onClick={() => runAnalysis(profile)} style={{ padding: '10px 22px', background: GQ.blueDim, border: `1px solid ${GQ.blue}`, borderRadius: 10, color: '#93c5fd', fontSize: 13, cursor: 'pointer' }}>
-              ✨ Analizar mi cartera
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Chat */}
-      <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: GQ.green }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: GQ.text }}>Agente de IA</span>
-          </div>
-          <button onClick={reset} style={{ fontSize: 11, color: GQ.textMuted, background: 'none', border: 'none', cursor: 'pointer' }}>Cambiar perfil</button>
-        </div>
-        <div style={{ background: '#0a0a0f', borderRadius: 10, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <User style={{ width: 12, height: 12, color: GQ.textMuted, flexShrink: 0 }} />
-          <span style={{ fontSize: 11, color: GQ.textMuted }}>{profile.salary}€/mes · {profile.goal} · Riesgo: {profile.risk}</span>
-        </div>
-
-        {msgs.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-            {['¿Cuáles son las noticias importantes del mercado hoy?', '¿Qué mueve hoy mi cartera?', '¿Estoy bien diversificado?', 'Crea un plan mensual con mi nómina', '¿Cuánto fondo de emergencia necesito?'].map(q => (
-              <button key={q} onClick={() => setInput(q)}
-                style={{ textAlign: 'left', padding: '10px 14px', borderRadius: 10, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.textMuted, fontSize: 12, cursor: 'pointer', transition: 'border-color 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = GQ.blue}
+        {/* 4 mini gauges */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginTop: 8 }}>
+          {gauges.map(g => {
+            const gc = g.val >= 7 ? GQ.green : g.val >= 4 ? '#f59e0b' : GQ.red;
+            const dashLen = (g.val/10)*125;
+            return (
+              <button key={g.label} style={{ background: '#0a0e1a', border: `1px solid ${GQ.border}`, borderRadius: 12, padding: '14px 12px', textAlign: 'center', cursor: 'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = gc}
                 onMouseLeave={e => e.currentTarget.style.borderColor = GQ.border}>
-                {q}
+                <svg width="80" height="46" viewBox="0 0 80 46">
+                  <path d="M 5 40 A 35 35 0 0 1 75 40" fill="none" stroke={GQ.border} strokeWidth="7" strokeLinecap="round" />
+                  <path d="M 5 40 A 35 35 0 0 1 75 40" fill="none" stroke={gc} strokeWidth="7" strokeLinecap="round"
+                    strokeDasharray={`${dashLen} 125`} style={{ transition: 'stroke-dasharray 1s ease' }} />
+                  <text x="40" y="38" textAnchor="middle" fill={gc} fontSize="14" fontWeight="800">{g.val}</text>
+                </svg>
+                <div style={{ fontSize: 10, color: '#f59e0b', marginBottom: 2 }}>{g.sub}</div>
+                <div style={{ fontSize: 12, color: GQ.text, fontWeight: 600 }}>{g.label}</div>
               </button>
-            ))}
-          </div>
-        )}
-
-        {msgs.length > 0 && (
-          <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-            {msgs.map((m, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.role === 'user' ? GQ.blueDim : GQ.border, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>
-                  {m.role === 'user' ? '👤' : '🤖'}
-                </div>
-                <div style={{ maxWidth: '82%', padding: '10px 12px', borderRadius: 12, background: m.role === 'user' ? GQ.blueDim : '#0a0a0f', fontSize: 12, color: GQ.text, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                  {m.content}
-                </div>
-              </div>
-            ))}
-            {loading && <div style={{ display: 'flex', gap: 8 }}><div style={{ width: 28, height: 28, borderRadius: '50%', background: GQ.border, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🤖</div><div style={{ padding: '10px 12px', borderRadius: 12, background: '#0a0a0f' }}><Loader2 style={{ width: 14, height: 14, color: GQ.textMuted, animation: 'spin 1s linear infinite' }} /></div></div>}
-            <div ref={endRef} />
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
-            placeholder="Ask anything"
-            style={{ flex: 1, background: '#0a0a0f', border: `1px solid ${GQ.border}`, borderRadius: 10, padding: '9px 13px', color: GQ.text, fontSize: 12, outline: 'none' }} />
-          <button onClick={send} disabled={loading || !input.trim()}
-            style={{ padding: '9px 14px', borderRadius: 10, background: loading ? GQ.border : GQ.blue, border: 'none', color: '#fff', cursor: 'pointer' }}>
-            <Send style={{ width: 14, height: 14 }} />
-          </button>
+            );
+          })}
         </div>
       </div>
-    </div>
-  );
-}
 
-// ─── Dividends Panel ───────────────────────────────────────────────────────────
-function DividendsPanel({ positions }) {
-  const [viewYear, setViewYear] = useState(new Date().getFullYear());
-  const [viewTab, setViewTab] = useState('max'); // max | year | prev
-  const years = [new Date().getFullYear() + 1, new Date().getFullYear(), new Date().getFullYear() - 1];
-
-  const totalInvested = positions.reduce((s, p) => s + (p.invested_amount_eur || 0), 0);
-  const totalCurrent = positions.reduce((s, p) => s + (p.current_value_eur || p.invested_amount_eur || 0), 0);
-  const totalAnnualDiv = positions.reduce((s, p) => s + ((p.current_value_eur || p.invested_amount_eur || 0) * getDivYield(p)), 0);
-  const yoc = totalInvested > 0 ? (totalAnnualDiv / totalInvested) * 100 : 0;
-
-  const monthlyData = Array.from({ length: 12 }, (_, i) => {
-    const month = i + 1;
-    const total = positions.filter(p => getDivYield(p) > 0).reduce((s, p) => {
-      const annual = (p.current_value_eur || p.invested_amount_eur || 0) * getDivYield(p);
-      const payMonths = p.investment_type === 'bond' ? [6, 12] : [3, 6, 9, 12];
-      return payMonths.includes(month) ? s + annual / payMonths.length : s;
-    }, 0);
-    return { month: format(new Date(viewYear, i, 1), 'MMM', { locale: es }), amount: +total.toFixed(2), year: viewYear };
-  });
-  const yearTotal = monthlyData.reduce((s, m) => s + m.amount, 0);
-
-  const divPositions = positions.filter(p => getDivYield(p) > 0).map(p => ({
-    ticker: p.ticker, name: p.name,
-    annual: (p.current_value_eur || p.invested_amount_eur || 0) * getDivYield(p),
-    yoc: getDivYield(p) * 100,
-    freq: p.investment_type === 'bond' ? 'Semestral' : 'Trimestral',
-  })).sort((a, b) => b.annual - a.annual);
-
-  return (
-    <div>
-      {/* Header stats - getquin style */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-        {[
-          { label: 'Total recibido', value: '0,00 €' },
-          { label: 'Retorno por dividendo últimos 12 meses (TTM)', value: '0 %' },
-          { label: 'YoC TTM', value: `${yoc.toFixed(2)} %` },
-          { label: 'TCAC', value: '-' },
-        ].map(item => (
-          <div key={item.label} style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ fontSize: 10, color: GQ.textMuted, marginBottom: 8, lineHeight: 1.3 }}>{item.label}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: GQ.text }}>{item.value}</div>
+      {/* Recommendations accordion */}
+      {result.recommendations?.length > 0 && (
+        <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: `1px solid ${GQ.border}` }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: GQ.text }}>Recomendaciones</span>
           </div>
-        ))}
-      </div>
-
-      {/* Chart tabs */}
-      <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[{ id: 'max', label: 'Duración máxima' }, ...years.map(y => ({ id: String(y), label: String(y) }))].map(t => (
-              <button key={t.id} onClick={() => { setViewTab(t.id); if (t.id !== 'max') setViewYear(parseInt(t.id)); }}
-                style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: viewTab === t.id ? 600 : 400, background: viewTab === t.id ? '#1f2937' : 'transparent', color: viewTab === t.id ? GQ.text : GQ.textMuted, cursor: 'pointer', borderBottom: viewTab === t.id ? `2px solid ${GQ.blue}` : '2px solid transparent' }}>
-                {t.label}
+          {result.recommendations.map((r, i) => (
+            <div key={i} style={{ borderBottom: i < result.recommendations.length-1 ? `1px solid ${GQ.border}` : 'none' }}>
+              <button onClick={() => setExpanded(expanded === i ? null : i)}
+                style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', color: GQ.text, textAlign: 'left' }}
+                onMouseEnter={e => e.currentTarget.style.background = GQ.cardHover}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{r.title}</span>
+                <span style={{ fontSize: 14, color: GQ.textMuted, transform: expanded === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
               </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: GQ.textMuted }} />
-            <span style={{ fontSize: 11, color: GQ.textMuted }}>{yoc > 0 ? `${(yoc / 12).toFixed(3)} €` : '0,126 €'}</span>
-          </div>
-        </div>
-
-        {yearTotal > 0 ? (
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -28, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GQ.border} vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 10, fill: GQ.textMuted }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: GQ.textMuted }} axisLine={false} tickLine={false} tickFormatter={v => `${v.toFixed(0)}€`} />
-              <Tooltip contentStyle={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 8, fontSize: 11, color: GQ.text }} formatter={v => [`${(+v).toFixed(2)}€`, 'Dividendo']} />
-              <Bar dataKey="amount" fill={GQ.blue} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: GQ.textMuted, marginBottom: 4 }}>No hay datos de dividendos.</div>
-              <div style={{ fontSize: 30, color: GQ.textDim }}>— —</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Dividend calendar table - getquin style */}
-      {divPositions.length > 0 && (
-        <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20, marginBottom: 12 }}>
-          <div style={{ display: 'flex', gap: 24, marginBottom: 12, borderBottom: `1px solid ${GQ.border}`, paddingBottom: 8 }}>
-            {[viewYear + 1, viewYear].map(y => (
-              <button key={y} onClick={() => setViewYear(y)}
-                style={{ fontSize: 13, fontWeight: viewYear === y ? 600 : 400, color: viewYear === y ? GQ.text : GQ.textMuted, background: 'none', border: 'none', cursor: 'pointer', paddingBottom: 8, borderBottom: `2px solid ${viewYear === y ? GQ.blue : 'transparent'}` }}>
-                {y}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px 80px', gap: 0 }}>
-            <div style={{ fontSize: 11, color: GQ.textMuted, padding: '4px 0' }}>Nasdaq</div>
-            <div style={{ fontSize: 11, color: '#6366f1', padding: '4px 0', background: '#6366f122', borderRadius: 4, textAlign: 'center' }}>Estimado</div>
-            <div style={{ fontSize: 11, color: GQ.textMuted, padding: '4px 0', textAlign: 'center' }}>4</div>
-            <div style={{ fontSize: 11, color: GQ.textMuted, padding: '4px 0', textAlign: 'right' }}>—</div>
-            <div style={{ fontSize: 11, color: GQ.textMuted, padding: '4px 0', textAlign: 'right' }}>—</div>
-          </div>
-          <div style={{ marginTop: 16 }}>
-            {divPositions.map((d, i) => (
-              <div key={d.ticker} style={{ display: 'flex', alignItems: 'center', padding: '10px 0', borderBottom: i < divPositions.length - 1 ? `1px solid ${GQ.border}` : 'none', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: PAL[i % PAL.length] }} />
-                </div>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: GQ.border, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: GQ.textMuted, flexShrink: 0 }}>{d.ticker.slice(0, 4)}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: GQ.text }}>{d.name?.slice(0, 30)}</div>
-                  <div style={{ fontSize: 10, color: GQ.textMuted }}>{d.freq}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: GQ.green }}>{d.annual.toFixed(3)} €</div>
-                  <div style={{ fontSize: 10, color: GQ.textMuted }}>{d.yoc.toFixed(2)} %</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Sold / Vendido section */}
-      <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: GQ.text, marginBottom: 4 }}>Vendido</div>
-        <div style={{ fontSize: 12, color: GQ.textMuted }}>No hay ventas registradas</div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Distribution Panel ────────────────────────────────────────────────────────
-const DIST_VIEWS = ['Tipo', 'Posiciones', 'DeepDive', 'Regiones', 'Sectores', 'Activos', 'Países', 'Divisas'];
-
-function DistributionPanel({ positions, totalCurrentValue }) {
-  const [view, setView] = useState('Tipo');
-  const totalVal = totalCurrentValue || 1;
-
-  const groups = useMemo(() => {
-    const typeG = {}, posG = {}, regionG = {}, sectorG = {};
-    positions.forEach((p, i) => {
-      const t = getType(p.investment_type);
-      const val = p.current_value_eur || p.invested_amount_eur || 0;
-      const gain = val - (p.invested_amount_eur || 0);
-      const gainPct = (p.invested_amount_eur || 0) > 0 ? (gain / (p.invested_amount_eur || 0)) * 100 : 0;
-      if (!typeG[p.investment_type]) typeG[p.investment_type] = { name: t.label, value: 0, color: t.color };
-      typeG[p.investment_type].value += val;
-      posG[p.ticker] = { name: p.name || p.ticker, ticker: p.ticker, value: val, color: PAL[i % PAL.length], gain, gainPct };
-      const reg = p.region || 'Sin región';
-      if (!regionG[reg]) regionG[reg] = { name: reg, value: 0, color: PAL[Object.keys(regionG).length % PAL.length] };
-      regionG[reg].value += val;
-      const sec = p.sector || 'Sin sector';
-      if (!sectorG[sec]) sectorG[sec] = { name: sec, value: 0, color: PAL[Object.keys(sectorG).length % PAL.length] };
-      sectorG[sec].value += val;
-    });
-    return {
-      tipo: Object.values(typeG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a, b) => b.value - a.value),
-      posiciones: Object.values(posG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a, b) => b.value - a.value),
-      regiones: Object.values(regionG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a, b) => b.value - a.value),
-      sectores: Object.values(sectorG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a, b) => b.value - a.value),
-    };
-  }, [positions, totalVal]);
-
-  const getViewData = () => {
-    if (view === 'Tipo') return groups.tipo;
-    if (view === 'Posiciones') return groups.posiciones;
-    if (view === 'Regiones') return groups.regiones;
-    if (view === 'Sectores') return groups.sectores;
-    if (view === 'DeepDive') return buildDeepDive(positions, totalVal);
-    if (view === 'Activos') return groups.posiciones;
-    if (view === 'Países') {
-      const countryG = {};
-      buildDeepDive(positions, totalVal).forEach((h, i) => {
-        const c = h.country || 'Global';
-        if (!countryG[c]) countryG[c] = { name: c, value: 0, color: PAL[i % PAL.length] };
-        countryG[c].value += h.value;
-      });
-      return Object.values(countryG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a,b) => b.value - a.value);
-    }
-    if (view === 'Divisas') {
-      const currG = {};
-      buildDeepDive(positions, totalVal).forEach((h, i) => {
-        const c = h.currency || 'EUR';
-        if (!currG[c]) currG[c] = { name: c, value: 0, color: PAL[i % PAL.length] };
-        currG[c].value += h.value;
-      });
-      return Object.values(currG).map(g => ({ ...g, pct: (g.value / totalVal) * 100 })).sort((a,b) => b.value - a.value);
-    }
-    return groups.tipo;
-  };
-  const data = getViewData();
-
-  if (positions.length === 0) return (
-    <div style={{ textAlign: 'center', padding: '60px 0', color: GQ.textMuted }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
-      <div style={{ fontSize: 14 }}>Añade posiciones para ver la distribución</div>
-    </div>
-  );
-
-  return (
-    <div>
-      {/* Tab row */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${GQ.border}`, marginBottom: 20, overflowX: 'auto' }}>
-        {DIST_VIEWS.map(v => (
-          <button key={v} onClick={() => setView(v)}
-            style={{ padding: '10px 14px', border: 'none', fontSize: 13, fontWeight: view === v ? 600 : 400, background: 'transparent', color: view === v ? GQ.text : GQ.textMuted, cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: `2px solid ${view === v ? GQ.blue : 'transparent'}`, transition: 'all 0.15s' }}>
-            {v}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-        <GQDonut data={data} size={220} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: GQ.text, marginBottom: 14, textAlign: 'right' }}>{view}</div>
-          {data.map((row, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${GQ.border}`, gap: 10, cursor: 'pointer' }}
-              onMouseEnter={e => e.currentTarget.style.background = GQ.cardHover}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: GQ.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</div>
-                <div style={{ height: 2, background: GQ.border, borderRadius: 1, marginTop: 5 }}>
-                  <div style={{ height: '100%', background: row.color, width: `${Math.min(row.pct, 100)}%`, borderRadius: 1 }} />
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', minWidth: 80 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: GQ.text }}>{row.pct.toFixed(2)} %</div>
-                {row.gainPct !== undefined && (
-                  <div style={{ fontSize: 11, color: row.gainPct >= 0 ? GQ.green : GQ.red }}>
-                    {row.gainPct >= 0 ? '↑' : '↓'}{Math.abs(row.gainPct).toFixed(2)}%
-                  </div>
-                )}
-              </div>
-              <ChevronRight style={{ width: 14, height: 14, color: GQ.textMuted, flexShrink: 0 }} />
+              {expanded === i && (
+                <div style={{ padding: '0 20px 14px', fontSize: 12, color: GQ.textMuted, lineHeight: 1.6 }}>{r.detail}</div>
+              )}
             </div>
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
+
 
 // ─── Performance Panel ─────────────────────────────────────────────────────────
 function PerformancePanel({ positions, totalInvested, totalCurrentValue, totalGain, totalGainPct }) {
@@ -963,20 +661,176 @@ function PerformancePanel({ positions, totalInvested, totalCurrentValue, totalGa
           </span>
         </div>
 
-        {[
-          { label: 'Tasa interna de rentabilidad', value: totalGainPct >= 0 ? `↑${totalGainPct.toFixed(2)} %` : `↓${Math.abs(totalGainPct).toFixed(2)} %`, color: totalGain >= 0 ? GQ.green : GQ.red },
-          { label: 'Tasa real de retorno ponderada en el tiempo', value: '↓10,26 %', color: GQ.red },
-        ].map(item => (
-          <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${GQ.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 13, color: GQ.textMuted }}>{item.label}</span>
-              <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid ${GQ.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 9, color: GQ.textMuted }}>ⓘ</span>
-              </div>
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: item.color }}>{item.value}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${GQ.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: GQ.textMuted }}>Tasa interna de rentabilidad</span>
+            <span style={{ fontSize: 10, color: GQ.textDim, border: `1px solid ${GQ.border}`, borderRadius: '50%', width: 14, height: 14, display:'flex', alignItems:'center', justifyContent:'center' }}>ⓘ</span>
           </div>
-        ))}
+          <span style={{ fontSize: 13, fontWeight: 700, color: totalGain >= 0 ? GQ.green : GQ.red }}>
+            {totalGain >= 0 ? '↑' : '↓'}{Math.abs(totalGainPct).toFixed(2)} %
+          </span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${GQ.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: GQ.textMuted }}>Tasa real de retorno ponderada en el tiempo</span>
+            <span style={{ fontSize: 10, color: GQ.textDim, border: `1px solid ${GQ.border}`, borderRadius: '50%', width: 14, height: 14, display:'flex', alignItems:'center', justifyContent:'center' }}>ⓘ</span>
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: totalGain >= 0 ? GQ.green : GQ.red }}>
+            {totalGain >= 0 ? '↑' : '↓'}{Math.abs(totalGainPct).toFixed(2)} %
+          </span>
+        </div>
+      </div>
+
+      {/* Evaluación comparativa / Punto de referencia */}
+      <BenchmarkPanel totalGainPct={totalGainPct} />
+    </div>
+  );
+}
+
+// ─── Benchmark Panel ───────────────────────────────────────────────────────────
+const BENCHMARK_OPTIONS = [
+  { id: 'SPY',    label: 'S&P 500',        ticker: 'SPY',     color: '#34d399' },
+  { id: 'VWCE.DE',label: 'MSCI World',     ticker: 'VWCE.DE', color: '#60a5fa' },
+  { id: 'QQQ',   label: 'NASDAQ 100',      ticker: 'QQQ',     color: '#a78bfa' },
+  { id: 'BTC-USD',label: 'Bitcoin',        ticker: 'BTC-USD', color: '#f59e0b' },
+  { id: 'GLD',   label: 'Oro',             ticker: 'GLD',     color: '#fbbf24' },
+  { id: 'EIMI.MI',label: 'MSCI EM IMI',   ticker: 'EIMI.MI', color: '#fb923c' },
+];
+
+const BENCH_RANGES = ['1M', 'YTD', '1Y', '3Y', '5A', 'Max'];
+
+function BenchmarkPanel({ totalGainPct }) {
+  const [selected, setSelected] = useState(['SPY']);
+  const [showPicker, setShowPicker] = useState(false);
+  const [range, setRange] = useState('YTD');
+  const [benchData, setBenchData] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const PROXY = 'https://corsproxy.io/?url=';
+  const YF = 'https://query1.finance.yahoo.com';
+
+  const fetchBench = async (ticker, r) => {
+    const rangeMap = { '1M': { range: '1mo', interval: '1d' }, 'YTD': { range: 'ytd', interval: '1wk' }, '1Y': { range: '1y', interval: '1wk' }, '3Y': { range: '3y', interval: '1mo' }, '5A': { range: '5y', interval: '1mo' }, 'Max': { range: 'max', interval: '1mo' } };
+    const { range: r2, interval } = rangeMap[r] || rangeMap['YTD'];
+    try {
+      const url = `${PROXY}${encodeURIComponent(`${YF}/v8/finance/chart/${ticker}?interval=${interval}&range=${r2}`)}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      const result = d?.chart?.result?.[0];
+      if (!result) return null;
+      const closes = result.indicators?.quote?.[0]?.close || [];
+      const timestamps = result.timestamp || [];
+      if (!closes.length) return null;
+      const base = closes.find(v => v != null) || closes[0];
+      return timestamps.map((ts, i) => ({
+        date: new Date(ts * 1000).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+        pct: closes[i] != null ? +((closes[i] - base) / base * 100).toFixed(2) : null,
+      })).filter(d => d.pct !== null);
+    } catch { return null; }
+  };
+
+  useEffect(() => {
+    if (!selected.length) return;
+    setLoading(true);
+    Promise.all(selected.map(id => {
+      const b = BENCHMARK_OPTIONS.find(x => x.id === id);
+      return b ? fetchBench(b.ticker, range).then(data => ({ id, data })) : null;
+    })).then(results => {
+      const map = {};
+      results.filter(Boolean).forEach(({ id, data }) => { if (data) map[id] = data; });
+      setBenchData(map);
+      setLoading(false);
+    });
+  }, [selected, range]);
+
+  // Merge all benchmark data points into one chart series
+  const chartData = (() => {
+    const allDates = [...new Set(Object.values(benchData).flatMap(d => d.map(p => p.date)))];
+    return allDates.map(date => {
+      const point = { date, portfolio: +totalGainPct.toFixed(2) };
+      Object.entries(benchData).forEach(([id, data]) => {
+        const match = data.find(p => p.date === date);
+        if (match) point[id] = match.pct;
+      });
+      return point;
+    });
+  })();
+
+  const allLines = [
+    { id: 'portfolio', label: 'Mi cartera', color: '#6366f1' },
+    ...BENCHMARK_OPTIONS.filter(b => selected.includes(b.id)),
+  ];
+
+  return (
+    <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, padding: 20, marginTop: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: GQ.text }}>Evaluación comparativa</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {BENCH_RANGES.map(r => (
+            <button key={r} onClick={() => setRange(r)}
+              style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: range === r ? GQ.text : 'transparent', color: range === r ? GQ.bg : GQ.textMuted, fontSize: 11, cursor: 'pointer', fontWeight: range === r ? 700 : 400 }}>
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GQ.textMuted, fontSize: 12 }}>Cargando datos...</div>
+      ) : chartData.length > 1 ? (
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={GQ.border} vertical={false} />
+            <XAxis dataKey="date" tick={{ fontSize: 9, fill: GQ.textMuted }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 9, fill: GQ.textMuted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
+            <Tooltip contentStyle={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 8, fontSize: 11, color: GQ.text }}
+              formatter={(v, name) => [`${v >= 0 ? '+' : ''}${v}%`, allLines.find(l => l.id === name)?.label || name]} />
+            {allLines.map(l => <Line key={l.id} type="monotone" dataKey={l.id} stroke={l.color} strokeWidth={l.id === 'portfolio' ? 2.5 : 1.5} dot={false} strokeDasharray={l.id === 'portfolio' ? '0' : '0'} />)}
+          </LineChart>
+        </ResponsiveContainer>
+      ) : (
+        <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GQ.textMuted, fontSize: 12 }}>Sin datos para mostrar</div>
+      )}
+
+      {/* Legend + selected chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: '#6366f115', border: '1px solid #6366f130', borderRadius: 20 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1' }} />
+          <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>Mi cartera</span>
+        </div>
+        {selected.map(id => {
+          const b = BENCHMARK_OPTIONS.find(x => x.id === id);
+          return b ? (
+            <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: `${b.color}15`, border: `1px solid ${b.color}30`, borderRadius: 20 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: b.color }} />
+              <span style={{ fontSize: 11, color: b.color }}>{b.label}</span>
+              <button onClick={() => setSelected(s => s.filter(x => x !== id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: b.color, fontSize: 12, lineHeight: 1, padding: 0, marginLeft: 2 }}>✕</button>
+            </div>
+          ) : null;
+        })}
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => setShowPicker(p => !p)}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, border: `1px solid ${GQ.border}`, background: 'transparent', color: GQ.textMuted, fontSize: 11, cursor: 'pointer' }}>
+            + Punto de referencia
+          </button>
+          {showPicker && (
+            <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 50, background: '#1a1f2e', border: `1px solid ${GQ.border}`, borderRadius: 12, padding: '8px 0', minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', marginBottom: 6 }}>
+              {BENCHMARK_OPTIONS.map(b => (
+                <button key={b.id} onClick={() => { setSelected(s => s.includes(b.id) ? s.filter(x => x !== b.id) : [...s, b.id]); }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', color: GQ.text, fontSize: 13, textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = GQ.cardHover}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: b.color }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: GQ.text }}>{b.label}</div>
+                    <div style={{ fontSize: 10, color: GQ.textMuted }}>{b.ticker}</div>
+                  </div>
+                  {selected.includes(b.id) && <span style={{ color: GQ.green }}>✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1138,6 +992,33 @@ export default function FinanceInvestTab() {
     return () => document.removeEventListener('click', close);
   }, []);
 
+  const [txSearch, setTxSearch] = useState('');
+  const [txFilter, setTxFilter] = useState('all');
+
+  const filteredTransactions = useMemo(() => {
+    let txs = allTransactions;
+    if (txFilter !== 'all') txs = txs.filter(t => t.type === txFilter);
+    if (txSearch.trim()) {
+      const q = txSearch.toLowerCase();
+      txs = txs.filter(t => t.ticker?.toLowerCase().includes(q) || t.name?.toLowerCase().includes(q));
+    }
+    return txs;
+  }, [allTransactions, txSearch, txFilter]);
+
+  const filteredGroupedTransactions = useMemo(() => {
+    const groups = {};
+    filteredTransactions.forEach(tx => {
+      const key = tx.date ? tx.date.slice(0, 7) : 'unknown';
+      if (!groups[key]) groups[key] = { key, label: tx.date ? format(new Date(tx.date + 'T12:00:00'), 'MMMM yyyy', { locale: es }) : 'Sin fecha', txs: [] };
+      groups[key].txs.push(tx);
+    });
+    return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
+  }, [filteredTransactions]);
+
+  // Helpers de ganancia — deben estar ANTES del useMemo que las usa
+  const getGain = (pos) => (pos.current_value_eur || pos.invested_amount_eur || 0) - (pos.invested_amount_eur || 0);
+  const getGainPct = (pos) => { const inv = pos.invested_amount_eur || 0; return inv === 0 ? 0 : (getGain(pos) / inv) * 100; };
+
   // Sorted positions
   const sortedPositions = useMemo(() => {
     const arr = [...positions];
@@ -1234,9 +1115,6 @@ export default function FinanceInvestTab() {
     });
     return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
   }, [allTransactions]);
-
-  const getGain = (pos) => (pos.current_value_eur || pos.invested_amount_eur || 0) - (pos.invested_amount_eur || 0);
-  const getGainPct = (pos) => { const inv = pos.invested_amount_eur || 0; return inv === 0 ? 0 : (getGain(pos) / inv) * 100; };
 
   const dailyIncome = dailyTxs.filter(t => ['income', 'transfer_from_savings', 'transfer_from_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);
   const dailyOut = dailyTxs.filter(t => ['expense', 'other', 'transfer_to_savings', 'transfer_to_investment'].includes(t.type)).reduce((s, t) => s + (t.amount || 0), 0);
@@ -1668,13 +1546,24 @@ export default function FinanceInvestTab() {
 
           {/* Transacciones — estilo getquin, agrupadas por mes */}
           <div style={{ background: GQ.card, border: `1px solid ${GQ.border}`, borderRadius: 16, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${GQ.border}` }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: GQ.text }}>Transacciones</span>
+            <div style={{ display: 'flex', gap: 10, padding: '12px 16px', borderBottom: `1px solid ${GQ.border}`, alignItems: 'center' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#0a0a0f', border: `1px solid ${GQ.border}`, borderRadius: 10, padding: '8px 12px' }}>
+                <span style={{ color: GQ.textDim, fontSize: 14 }}>🔍</span>
+                <input value={txSearch} onChange={e => setTxSearch(e.target.value)} placeholder="Buscar ticker, nombre..."
+                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: GQ.text, fontSize: 13 }} />
+                {txSearch && <button onClick={() => setTxSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: GQ.textMuted }}>✕</button>}
+              </div>
+              <select value={txFilter} onChange={e => setTxFilter(e.target.value)}
+                style={{ background: '#0a0a0f', border: `1px solid ${GQ.border}`, borderRadius: 10, color: GQ.text, fontSize: 12, padding: '8px 12px', cursor: 'pointer', outline: 'none' }}>
+                <option value="all">Todos ▾</option>
+                <option value="buy">Compras</option>
+                <option value="sell">Ventas</option>
+              </select>
             </div>
-            {allTransactions.length === 0 ? (
+            {filteredGroupedTransactions.length === 0 ? (
               <div style={{ padding: '24px 20px', fontSize: 12, color: GQ.textDim }}>Sin transacciones</div>
             ) : (
-              groupedTransactions.map(group => (
+              filteredGroupedTransactions.map(group => (
                 <div key={group.key}>
                   {/* Month header */}
                   <div style={{ padding: '10px 20px', background: '#0d0d14', fontSize: 12, fontWeight: 600, color: GQ.textMuted, textTransform: 'capitalize' }}>
